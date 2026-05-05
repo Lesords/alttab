@@ -71,6 +71,7 @@ Options:\n\
    -fg color  foreground color\n\
 -frame color  active frame color\n\
 -inact color  inactive frame color\n\
+  -min color  minimized frame color\n\
    -bc color  extra border color\n\
    -bw N      extra border width\n\
  -font name   font name in the form xft:fontconfig_pattern\n\
@@ -133,6 +134,7 @@ static int use_args_and_xrm(int *argc, char **argv)
         {"-fg", "*foreground", XrmoptionSepArg, NULL},
         {"-frame", "*framecolor", XrmoptionSepArg, NULL},
         {"-inact", "*inactcolor", XrmoptionSepArg, NULL},
+        {"-min", "*mincolor", XrmoptionSepArg, NULL},
         {"-bc", "*bordercolor", XrmoptionSepArg, NULL},
         {"-bw", "*borderwidth", XrmoptionSepArg, NULL},
         {"-font", "*font", XrmoptionSepArg, NULL},
@@ -470,6 +472,9 @@ static int use_args_and_xrm(int *argc, char **argv)
     g.color[COLFG].name = s ? s : DEFCOLFG;
     s = xresource_load_string(&db, XRMAPPNAME, "framecolor");
     g.color[COLFRAME].name = s ? s : DEFCOLFRAME;
+    s = xresource_load_string(&db, XRMAPPNAME, "mincolor");
+    g.min_col_specified = (s != NULL);
+    g.color[COLMIN].name = s ? s : g.color[COLFRAME].name;
     s = xresource_load_string(&db, XRMAPPNAME, "inactcolor");
     g.color[COLINACT].name = s ? s : g.color[COLFG].name;
     s = xresource_load_string(&db, XRMAPPNAME, "bordercolor");

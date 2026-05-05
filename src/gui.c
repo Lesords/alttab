@@ -87,6 +87,11 @@ static GC create_gc(int type)
         XSetBackground(dpy, gc, g.color[COLBG].xcolor.pixel);
         XSetLineAttributes(dpy, gc, FRAME_W, line_style, cap_style, join_style);
         break;
+    case 3:
+        XSetForeground(dpy, gc, g.color[COLMIN].xcolor.pixel);
+        XSetBackground(dpy, gc, g.color[COLBG].xcolor.pixel);
+        XSetLineAttributes(dpy, gc, 1, line_style, cap_style, join_style);
+        break;
     default:
         msg(-1, "unknown GC type, not setting colors\n");
         break;
@@ -127,7 +132,11 @@ static void framesRedraw(void)
         if (f == selNdx)
             continue;           // skip
         drawFr(g.gcReverse, f); // thick bg
-        drawFr(g.gcDirect, f);  // thin frame
+        if (g.winlist[f].use_minimized_color) {
+            drawFr(g.gcMin, f);  // minimized frame
+        } else {
+            drawFr(g.gcDirect, f);  // thin frame
+        }
     }
 // _after_ unselected draw selected, because they may overlap
     drawFr(g.gcFrame, selNdx);
@@ -413,6 +422,7 @@ int startupGUItasks(void)
     g.gcDirect = create_gc(0);
     g.gcReverse = create_gc(1);
     g.gcFrame = create_gc(2);
+    g.gcMin = create_gc(3);
 
     return 1;
 }
@@ -911,6 +921,8 @@ void shutdownGUI(void)
 
     if (g.gcDirect)
         XFreeGC(dpy, g.gcDirect);
+    if (g.gcMin)
+        XFreeGC(dpy, g.gcMin);
     if (g.gcReverse)
         XFreeGC(dpy, g.gcReverse);
     if (g.gcFrame)

@@ -16,7 +16,7 @@ alttab(1) -- the task switcher
 
 ## SYNOPSIS
 
-`alttab` [`-w` <N>] [`-d` <N>] [`-sc` <N>] [`-mk` <str>] [`-kk` <str>] [`-bk` <str>] [`-pk` <str>] [`-nk` <str>] [`-ck` <str>] [`-dk` <str>] [`-mm` <N>] [`-bm` <N>] [`-t` <NxM>] [`-i` <NxM>] [`-vp` <str>] [`-p` <str>] [`-s` <N>] [`-theme` <name>] [`-bg` <color>] [`-fg` <color>] [`-frame` <color>] [`-inact` <color>] [`-bc` <color>] [`-bw` <N>] [`-font` <name>] [`-vertical`] [`-sortmin`] [`-e`] [`-b` <N>] [`-ns`] [`-v`\|`-vv`]
+`alttab` [`-w` <N>] [`-d` <N>] [`-sc` <N>] [`-mk` <str>] [`-kk` <str>] [`-bk` <str>] [`-pk` <str>] [`-nk` <str>] [`-ck` <str>] [`-dk` <str>] [`-mm` <N>] [`-bm` <N>] [`-t` <NxM>] [`-i` <NxM>] [`-vp` <str>] [`-p` <str>] [`-s` <N>] [`-theme` <name>] [`-bg` <color>] [`-fg` <color>] [`-frame` <color>] [`-inact` <color>] [`-min` <color>] [`-bc` <color>] [`-bw` <N>] [`-font` <name>] [`-vertical`] [`-sortmin`] [`-e`] [`-b` <N>] [`-ns`] [`-v`\|`-vv`]
 
 ## DESCRIPTION
 
@@ -282,6 +282,12 @@ The following five options accept color names or <#rrggbb>. Special value <&#95;
     default: foreground color
 
     Color of frame around non-selected tiles.
+
+  * `-min` <color>:
+    resource: alttab.mincolor  
+    default: frame color
+
+    In stacking WM, color of frame for minimized windows.
 
   * `-bc` <color>:
     resource: alttab.bordercolor  

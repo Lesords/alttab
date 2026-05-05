@@ -47,7 +47,8 @@ along with alttab.  If not, see <http://www.gnu.org/licenses/>.
 #define COLFRAME    2
 #define COLBORDER   3
 #define COLINACT    4
-#define NCOLORS     5
+#define COLMIN      5
+#define NCOLORS     6
 #define DEFCOLBG    "black"
 #define DEFCOLFG    "grey"
 #define DEFCOLFRAME "#a0abab"
@@ -87,6 +88,7 @@ typedef struct {
     Pixmap icon_mask;
     unsigned int icon_w, icon_h;
     bool icon_allocated;        // we must free icon, because we created it (placeholder or depth conversion)
+    bool use_minimized_color;
 #ifdef ICON_DEBUG
     char icon_src[MAXNAMESZ];
 #endif
@@ -204,7 +206,7 @@ typedef struct {
     int option_bottom_line;
     bool option_no_skip_taskbar;
     Color color[NCOLORS];
-    GC gcDirect, gcReverse, gcFrame;    // used in both gui.c and win.c
+    GC gcDirect, gcReverse, gcFrame, gcMin;    // used in both gui.c and win.c
     unsigned int ignored_modmask;
     icon_t *ic;                 // cache of all icons
     EwmhFeatures ewmh;          // guessed by ewmh_detectFeatures
@@ -212,6 +214,7 @@ typedef struct {
 //    SwitchMoment last; // for detecting false focus events from WM
     bool option_keep_ui;
     bool option_sort_minimize;
+    bool min_col_specified;
 } Globals;
 
 // gui

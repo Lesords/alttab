@@ -1,10 +1,14 @@
 .\" generated with Ronn-NG/v0.10.1
 .\" http://github.com/apjanke/ronn-ng/tree/0.10.1
+<<<<<<< master
+.TH "ALTTAB" "1" "May 2026" ""
+=======
 .TH "ALTTAB" "1" "April 2026" ""
+>>>>>>> master
 .SH "NAME"
 \fBalttab\fR \- the task switcher
 .SH "SYNOPSIS"
-\fBalttab\fR [\fB\-w\fR \fIN\fR] [\fB\-d\fR \fIN\fR] [\fB\-sc\fR \fIN\fR] [\fB\-mk\fR \fIstr\fR] [\fB\-kk\fR \fIstr\fR] [\fB\-bk\fR \fIstr\fR] [\fB\-pk\fR \fIstr\fR] [\fB\-nk\fR \fIstr\fR] [\fB\-ck\fR \fIstr\fR] [\fB\-dk\fR \fIstr\fR] [\fB\-mm\fR \fIN\fR] [\fB\-bm\fR \fIN\fR] [\fB\-t\fR \fINxM\fR] [\fB\-i\fR \fINxM\fR] [\fB\-vp\fR \fIstr\fR] [\fB\-p\fR \fIstr\fR] [\fB\-s\fR \fIN\fR] [\fB\-theme\fR \fIname\fR] [\fB\-bg\fR \fIcolor\fR] [\fB\-fg\fR \fIcolor\fR] [\fB\-frame\fR \fIcolor\fR] [\fB\-inact\fR \fIcolor\fR] [\fB\-bc\fR \fIcolor\fR] [\fB\-bw\fR \fIN\fR] [\fB\-font\fR \fIname\fR] [\fB\-vertical\fR] [\fB\-sortmin\fR] [\fB\-e\fR] [\fB\-b\fR \fIN\fR] [\fB\-ns\fR] [\fB\-v\fR|\fB\-vv\fR]
+\fBalttab\fR [\fB\-w\fR \fIN\fR] [\fB\-d\fR \fIN\fR] [\fB\-sc\fR \fIN\fR] [\fB\-mk\fR \fIstr\fR] [\fB\-kk\fR \fIstr\fR] [\fB\-bk\fR \fIstr\fR] [\fB\-pk\fR \fIstr\fR] [\fB\-nk\fR \fIstr\fR] [\fB\-ck\fR \fIstr\fR] [\fB\-dk\fR \fIstr\fR] [\fB\-mm\fR \fIN\fR] [\fB\-bm\fR \fIN\fR] [\fB\-t\fR \fINxM\fR] [\fB\-i\fR \fINxM\fR] [\fB\-vp\fR \fIstr\fR] [\fB\-p\fR \fIstr\fR] [\fB\-s\fR \fIN\fR] [\fB\-theme\fR \fIname\fR] [\fB\-bg\fR \fIcolor\fR] [\fB\-fg\fR \fIcolor\fR] [\fB\-frame\fR \fIcolor\fR] [\fB\-inact\fR \fIcolor\fR] [\fB\-min\fR \fIcolor\fR] [\fB\-bc\fR \fIcolor\fR] [\fB\-bw\fR \fIN\fR] [\fB\-font\fR \fIname\fR] [\fB\-vertical\fR] [\fB\-sortmin\fR] [\fB\-e\fR] [\fB\-b\fR \fIN\fR] [\fB\-ns\fR] [\fB\-v\fR|\fB\-vv\fR]
 .SH "DESCRIPTION"
 The task switcher designed for minimalistic window managers or standalone X11 session\.
 .P
@@ -248,6 +252,13 @@ default: foreground color
 .IP
 Color of frame around non\-selected tiles\.
 .TP
+\fB\-min\fR \fIcolor\fR
+resource: alttab\.mincolor
+.br
+default: frame color
+.IP
+In stacking WM, color of frame for minimized windows\.
+.TP
 \fB\-bc\fR \fIcolor\fR
 resource: alttab\.bordercolor
 .br
@@ -327,13 +338,21 @@ Verbosity\.
 .TP
 \fB\-h\fR
 short help
-.SH "CAVEATS"
+.P
+##CAVEATS
+.P
 Run alttab after WM, or autodetection will fail\.
-.SH "AUTHOR"
+.P
+##AUTHOR
+.P
 Copyright 2017\-2025 Alexander Kulak \fB<sa\-dev AT odd POINT systems>\fR\.
-.SH "REPORTING BUGS"
+.P
+##REPORTING BUGS
+.P
 Please report issues on github \fIhttps://github\.com/sagb/alttab/issues\fR\.
-.SH "SEE ALSO"
+.P
+##SEE ALSO
+.P
 EWMH compatible WM list \fIhttps://en\.wikipedia\.org/wiki/Extended_Window_Manager_Hints#List_of_window_managers_that_support_Extended_Window_Manager_Hints\fR\.
 .P
 Description of fontconfig pattern \fIhttps://www\.freedesktop\.org/software/fontconfig/fontconfig\-user\.html\fR\.
