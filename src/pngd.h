@@ -1,7 +1,7 @@
 /*
 pngd.c definitions.
 
-Copyright 2017-2025 Alexander Kulak.
+Copyright 2017-2026 Alexander Kulak.
 This file is part of alttab program.
 
 alttab is free software: you can redistribute it and/or modify
