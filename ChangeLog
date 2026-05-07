@@ -1,3 +1,27 @@
+2026-05-08  Alexander Kulak  <sa-dev@odd.systems>
+
+	version 1.8.0
+
+	Disable bottom line by default.
+	Avoid xnee dependency in tests.
+	Build variable to debug icon source.
+	More secure input filtering.
+	Option -s 5 to prefer file icon if size is equal.
+	Escape key to close UI.
+	Handle COMPOUND WM_NAME.
+	Secure window name loading in ratpoison.
+	Show desktop names instead of numbers.
+	Adapt test script for Darwin.
+	Option -sortmin to show minimized windows last.
+	Option -min to color minimized windows frames.
+	Fix DISPLAY in test script.
+	Fix C language errors.
+
+	Thanks: CodeFaux, Ihar Hrachyshka, Sergey Kudashev, Peter Pentchev,
+		Dan Jacobson, Veraellyunjie.
+
+	Closes: #151, #166, #170, #176, #177, #179, #183, #189, #190.
+
 2023-04-29  Alexander Kulak  <sa-dev@odd.systems>
 
 	version 1.7.1
