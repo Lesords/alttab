@@ -402,8 +402,10 @@ end_special_1:
         ic = initIcon();
         if (ic == NULL)
             return 0;
-        strncpy(ic->app, app, MAXAPPLEN);
-        strncpy(ic->src_path, pe->fts_path, MAXICONPATHLEN-1);
+        strncpy(ic->app, app, MAXAPPLEN - 1);
+        ic->app[MAXAPPLEN - 1] = '\0';
+        strncpy(ic->src_path, pe->fts_path, MAXICONPATHLEN - 1);
+        ic->src_path[MAXICONPATHLEN - 1] = '\0';
         ic->src_w = ix;
         ic->src_h = iy;
         ic->ext = ext;
@@ -415,7 +417,8 @@ end_special_1:
         // best value: g.option_iconW, H
         // should we replace the icon?
         if (iconMatchBetter(ix, iy, ic->src_w, ic->src_h, false)) {
-            strncpy(ic->src_path, pe->fts_path, MAXICONPATHLEN-1);
+            strncpy(ic->src_path, pe->fts_path, MAXICONPATHLEN - 1);
+            ic->src_path[MAXICONPATHLEN - 1] = '\0';
             ic->src_w = ix;
             ic->src_h = iy;
             ic->ext = ext;

@@ -466,7 +466,8 @@ int addIconFromFiles(WindowInfo * wi)
                 wi->icon_drawable = ic->drawable;
                 wi->icon_mask = ic->mask;
 #ifdef ICON_DEBUG
-                strncpy(wi->icon_src, ic->src_path, MAXNAMESZ);
+                strncpy(wi->icon_src, ic->src_path, MAXNAMESZ - 1);
+                wi->icon_src[MAXNAMESZ - 1] = '\0';
 #endif
                 ret = 1;
                 goto out;
@@ -497,7 +498,8 @@ int addWindowInfo(Window win, int reclevel, int wm_id, unsigned long desktop,
 // 1. get name
 
     if (wm_name) {
-        strncpy(WI.name, wm_name, MAXNAMESZ-1);
+        strncpy(WI.name, wm_name, MAXNAMESZ - 1);
+        WI.name[MAXNAMESZ - 1] = '\0';
     } else {
         // handle COMPOUND WM_NAME, see #177.
         XTextProperty text_prop;
