@@ -13,6 +13,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: update apt cache
+      run: sudo apt-get update
     - name: install build dependencies
       run: sudo apt-get -y install libx11-dev libxmu-dev libxft-dev libxrender-dev libxrandr-dev libpng-dev libxpm-dev uthash-dev autoconf automake
     - name: avoid missing autotools
