@@ -16,7 +16,7 @@ alttab(1) -- the task switcher
 
 ## SYNOPSIS
 
-`alttab` [`-w` <N>] [`-d` <N>] [`-sc` <N>] [`-mk` <str>] [`-kk` <str>] [`-bk` <str>] [`-pk` <str>] [`-nk` <str>] [`-ck` <str>] [`-dk` <str>] [`-mm` <N>] [`-bm` <N>] [`-t` <NxM>] [`-i` <NxM>] [`-vp` <str>] [`-p` <str>] [`-s` <N>] [`-theme` <name>] [`-bg` <color>] [`-fg` <color>] [`-frame` <color>] [`-inact` <color>] [`-min` <color>] [`-bc` <color>] [`-bw` <N>] [`-font` <name>] [`-vertical`] [`-sortmin`] [`-e`] [`-b` <N>] [`-ns`] [`-v`\|`-vv`]
+`alttab` [`-w` <N>] [`-d` <N>] [`-sc` <N>] [`-mk` <str>] [`-kk` <str>] [`-bk` <str>] [`-pk` <str>] [`-nk` <str>] [`-ck` <str>] [`-dk` <str>] [`-mm` <N>] [`-bm` <N>] [`-t` <NxM>] [`-i` <NxM>] [`-vp` <str>] [`-p` <str>] [`-s` <N>] [`-theme` <name>] [`-bg` <color>] [`-fg` <color>] [`-frame` <color>] [`-inact` <color>] [`-min` <color>] [`-bc` <color>] [`-fw` <N>] [`-bw` <N>] [`-font` <name>] [`-vertical`] [`-sortmin`] [`-e`] [`-b` <N>] [`-ns`] [`-v`\|`-vv`]
 
 ## DESCRIPTION
 
@@ -300,6 +300,12 @@ The following six options accept color names or <#rrggbb>. Special value <&#95;r
     default: <0> (no extra border)
 
     Width of extra border above.
+
+  * `-fw` <N>:
+    resource: alttab.framewidth  
+    default: <8>
+
+    Width of frame around selected tile.
 
   * `-font` <name>:
     resource: alttab.font  

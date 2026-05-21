@@ -38,7 +38,7 @@ along with alttab.  If not, see <http://www.gnu.org/licenses/>.
 #define DEFICONH    32
 #define DEFBORDERW  0
 #define DEFTHEME    "hicolor"
-#define FRAME_W     8
+#define DEFFRAMEW   8
 //#define DEFFONT   "xft:DejaVu Sans Condensed-10"
 #define DEFFONT     "xft:sans-10"
 
@@ -215,6 +215,9 @@ typedef struct {
     bool option_keep_ui;
     bool option_sort_minimize;
     bool min_col_specified;
+#define FRAME_MIN_USER      1
+#define frameW              g.option_frameW
+    int option_frameW;
 } Globals;
 
 // gui

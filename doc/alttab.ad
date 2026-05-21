@@ -66,6 +66,9 @@ alttab.background:      #c9c9c9
 ! Red letters
 alttab.foreground:      #600000
 
+! Thin frame around selected tile
+!alttab.framewidth:      4
+
 ! Random dark frame around selected tile
 alttab.framecolor:      _rnd_low
 

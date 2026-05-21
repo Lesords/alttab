@@ -74,6 +74,7 @@ Options:\n\
   -min color  minimized frame color\n\
    -bc color  extra border color\n\
    -bw N      extra border width\n\
+   -fw N      active frame width\n\
  -font name   font name in the form xft:fontconfig_pattern\n\
  -vertical    vertical layout\n\
   -sortmin    sort minimized windows last\n\
@@ -101,7 +102,7 @@ static int use_args_and_xrm(int *argc, char **argv)
     unsigned int wmindex, dsindex, scindex, isrc, bindex;
     char *gtile, *gicon, *gview, *gpos;
     int x, y;
-    unsigned int w, h, bw;
+    unsigned int w, h, bw, fw;
     int xpg;
     char *s;
     char *rm;
@@ -137,6 +138,7 @@ static int use_args_and_xrm(int *argc, char **argv)
         {"-min", "*mincolor", XrmoptionSepArg, NULL},
         {"-bc", "*bordercolor", XrmoptionSepArg, NULL},
         {"-bw", "*borderwidth", XrmoptionSepArg, NULL},
+        {"-fw", "*framewidth", XrmoptionSepArg, NULL},
         {"-font", "*font", XrmoptionSepArg, NULL},
         {"-vertical", "*vertical", XrmoptionIsArg, NULL},
         {"-e", "*keep", XrmoptionIsArg, NULL},
@@ -377,6 +379,22 @@ static int use_args_and_xrm(int *argc, char **argv)
 
     msg(0, "%dx%d tile, %dx%d icon\n",
         g.option_tileW, g.option_tileH, g.option_iconW, g.option_iconH);
+
+    switch (xresource_load_int(&db, XRMAPPNAME, "framewidth", &fw)) {
+    case 1:
+        if (fw >= FRAME_MIN_USER)
+          g.option_frameW = fw;
+        else
+          die(inv, "fw argument range");
+        break;
+    case 0:
+        g.option_frameW = DEFFRAMEW;
+        break;
+    case -1:
+        die(inv, "fw argument");
+        break;
+    }
+    msg(0, "fw: %d\n", g.option_frameW);
 
     switch (xresource_load_int(&db, XRMAPPNAME, "borderwidth", &bw)) {
     case 1:

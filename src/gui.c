@@ -75,7 +75,7 @@ static GC create_gc(int type)
     case 1:
         XSetForeground(dpy, gc, g.color[COLBG].xcolor.pixel);
         XSetBackground(dpy, gc, g.color[COLINACT].xcolor.pixel);
-        XSetLineAttributes(dpy, gc, FRAME_W, line_style, cap_style, join_style);
+        XSetLineAttributes(dpy, gc, frameW, line_style, cap_style, join_style);
         break;
     case 0:
         XSetForeground(dpy, gc, g.color[COLINACT].xcolor.pixel);
@@ -85,7 +85,7 @@ static GC create_gc(int type)
     case 2:
         XSetForeground(dpy, gc, g.color[COLFRAME].xcolor.pixel);
         XSetBackground(dpy, gc, g.color[COLBG].xcolor.pixel);
-        XSetLineAttributes(dpy, gc, FRAME_W, line_style, cap_style, join_style);
+        XSetLineAttributes(dpy, gc, frameW, line_style, cap_style, join_style);
         break;
     case 3:
         XSetForeground(dpy, gc, g.color[COLMIN].xcolor.pixel);
@@ -108,15 +108,15 @@ static void drawFr(GC gc, int f)
 {
     int x, y;
     if (g.option_vertical) {
-        x = 0 + (FRAME_W / 2);
-        y = f * (tileH + FRAME_W) + (FRAME_W / 2);
+        x = 0 + (frameW / 2);
+        y = f * (tileH + frameW) + (frameW / 2);
     } else {
-        x = f * (tileW + FRAME_W) + (FRAME_W / 2);
-        y = 0 + (FRAME_W / 2);
+        x = f * (tileW + frameW) + (frameW / 2);
+        y = 0 + (frameW / 2);
     }
     int d = XDrawRectangle(dpy, uiwin, gc,
                            x, y,
-                           tileW + FRAME_W, tileH + FRAME_W);
+                           tileW + frameW, tileH + frameW);
     if (!d) {
         msg(-1, "can't draw frame\n");
     }
@@ -149,17 +149,17 @@ static void framesRedraw(void)
 static int pointedTile(int x, int y)
 {
     if (g.option_vertical) {
-        if (y < (FRAME_W / 2)
-            || y > (uiwinH - (FRAME_W / 2))
+        if (y < (frameW / 2)
+            || y > (uiwinH - (frameW / 2))
             || x < 0 || x > uiwinW)
             return -1;
-        return (y - (FRAME_W / 2)) / visualTileH;
+        return (y - (frameW / 2)) / visualTileH;
     } else {
-        if (x < (FRAME_W / 2)
-            || x > (uiwinW - (FRAME_W / 2))
+        if (x < (frameW / 2)
+            || x > (uiwinW - (frameW / 2))
             || y < 0 || y > uiwinH)
             return -1;
-        return (x - (FRAME_W / 2)) / visualTileW;
+        return (x - (frameW / 2)) / visualTileW;
     }
 }
 
@@ -276,10 +276,10 @@ endBottomLine:
         int x, y, w, h;
         if (g.option_vertical) {
             x = iconW + 5;
-            y = FRAME_W; // avoids overlapping with frames
+            y = frameW; // avoids overlapping with frames
             w = tileW - iconW - 5 - bottW;
             if (bottW > 0) w = w - 5 - 5; // avoids label too close to bottom line
-            h = tileH - FRAME_W;
+            h = tileH - frameW;
         } else {
             x = 0;
             y = iconH + 5;
@@ -337,11 +337,11 @@ static int placeSingleTile (int j) {
     msg(1, "copying tile %d to canvas\n", j);
     //XSync (dpy, false);
     if (g.option_vertical) {
-        dest_x = FRAME_W;
-        dest_y = j * (tileH + FRAME_W) + FRAME_W;
+        dest_x = frameW;
+        dest_y = j * (tileH + frameW) + frameW;
     } else {
-        dest_x = j * (tileW + FRAME_W) + FRAME_W;
-        dest_y = FRAME_W;
+        dest_x = j * (tileW + frameW) + frameW;
+        dest_y = frameW;
     }
     r = XCopyArea(dpy, g.winlist[j].tile, uiwin,
             g.gcDirect, 0, 0, tileW, tileH,   // src
@@ -548,17 +548,17 @@ int uiShow(bool direction)
         avail_h -= g.option_posY;
     }
 // tiles may be smaller if they don't fit viewport
-    uiwinW = (tileW + FRAME_W) * g.maxNdx + FRAME_W;
+    uiwinW = (tileW + frameW) * g.maxNdx + frameW;
     if (uiwinW > avail_w && !g.option_vertical) {
-        int frames = FRAME_W * g.maxNdx + FRAME_W;
+        int frames = frameW * g.maxNdx + frameW;
         rt = ((float)(avail_w - frames)) / ((float)(tileW * g.maxNdx));
         tileW = (float)tileW *rt;
         tileH = (float)tileH *rt;
         uiwinW = tileW * g.maxNdx + frames;
     }
-    uiwinH = (tileH + FRAME_W) * g.maxNdx + FRAME_W;
+    uiwinH = (tileH + frameW) * g.maxNdx + frameW;
     if (uiwinH > avail_h && g.option_vertical) {
-        int frames = FRAME_W * g.maxNdx + FRAME_W;
+        int frames = frameW * g.maxNdx + frameW;
         rt = ((float)(avail_h - frames)) / ((float)(tileH * g.maxNdx));
         tileW = (float)tileW *rt;
         tileH = (float)tileH *rt;
@@ -576,9 +576,9 @@ int uiShow(bool direction)
         iconW = rt * iconW;
     }
     if (g.option_vertical)
-        uiwinW = tileW + 2 * FRAME_W;
+        uiwinW = tileW + 2 * frameW;
     else
-        uiwinH = tileH + 2 * FRAME_W;
+        uiwinH = tileH + 2 * frameW;
 
     if (g.option_positioning == POS_CENTER) {
         uiwinX = (g.vp.w - uiwinW) / 2 + g.vp.x;
@@ -589,11 +589,11 @@ int uiShow(bool direction)
     }
 
     if (g.option_vertical) {
-        visualTileW = uiwinW - FRAME_W;
-        visualTileH = (uiwinH - FRAME_W) / g.maxNdx;
+        visualTileW = uiwinW - frameW;
+        visualTileH = (uiwinH - frameW) / g.maxNdx;
     } else {
-        visualTileH = uiwinH - FRAME_W;
-        visualTileW = (uiwinW - FRAME_W) / g.maxNdx;
+        visualTileH = uiwinH - frameW;
+        visualTileW = (uiwinW - frameW) / g.maxNdx;
     }
     if (g.debug > 0) {
         msg(0, "tile w=%d h=%d\n", tileW, tileH);
@@ -730,7 +730,7 @@ void uiExpose(void)
             uwq.w, uwq.h, uwq.x, uwq.y);
         int xdiff = uwq.x - uiwinX;
         int ydiff = uwq.y - uiwinY;
-        if (abs(xdiff) > FRAME_W / 2 || abs(ydiff) > FRAME_W / 2) {
+        if (abs(xdiff) > frameW / 2 || abs(ydiff) > frameW / 2) {
             msg(1, "WM moved uiwin too far, trying to correct\n");
             XMoveWindow(dpy, uiwin, uiwinX, uiwinY);
         }
