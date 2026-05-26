@@ -76,6 +76,7 @@ Options:\n\
    -bw N      extra border width\n\
    -fw N      active frame width\n\
    -sp N      spacing between tiles\n\
+   -cr N      corner radius for rounded corners\n\
  -font name   font name in the form xft:fontconfig_pattern\n\
  -vertical    vertical layout\n\
   -sortmin    sort minimized windows last\n\
@@ -141,6 +142,7 @@ static int use_args_and_xrm(int *argc, char **argv)
         {"-bw", "*borderwidth", XrmoptionSepArg, NULL},
         {"-fw", "*framewidth", XrmoptionSepArg, NULL},
         {"-sp", "*spacing", XrmoptionSepArg, NULL},
+        {"-cr", "*cornerradius", XrmoptionSepArg, NULL},
         {"-font", "*font", XrmoptionSepArg, NULL},
         {"-vertical", "*vertical", XrmoptionIsArg, NULL},
         {"-e", "*keep", XrmoptionIsArg, NULL},
@@ -416,6 +418,25 @@ static int use_args_and_xrm(int *argc, char **argv)
         }
     }
     msg(0, "spacing: %d\n", g.option_spacing);
+
+    {
+        unsigned int cr;
+        switch (xresource_load_int(&db, XRMAPPNAME, "cornerradius", &cr)) {
+        case 1:
+            if (cr >= CORNER_RADIUS_MIN_USER)
+              g.option_cornerRadius = cr;
+            else
+              die(inv, "cornerradius argument range");
+            break;
+        case 0:
+            g.option_cornerRadius = DEFCORNER_RADIUS;
+            break;
+        case -1:
+            die(inv, "cornerradius argument");
+            break;
+        }
+    }
+    msg(0, "cornerradius: %d\n", g.option_cornerRadius);
 
     switch (xresource_load_int(&db, XRMAPPNAME, "borderwidth", &bw)) {
     case 1:

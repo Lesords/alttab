@@ -863,3 +863,59 @@ uint32_t pixelComposite(uint32_t fg, uint8_t a, CompositeConst *cc)
     return ret;
 }
 
+Pixmap createRoundedRectMask(int width, int height, int radius)
+{
+    if (radius <= 0) return 0;
+    int r = radius;
+    if (2 * r > width)  r = width / 2;
+    if (2 * r > height) r = height / 2;
+    if (r <= 0) return 0;
+
+    Pixmap mask = XCreatePixmap(dpy, root, width, height, 1);
+    if (!mask) return 0;
+
+    GC gc = XCreateGC(dpy, mask, 0, NULL);
+    if (!gc) {
+        XFreePixmap(dpy, mask);
+        return 0;
+    }
+
+    XSetForeground(dpy, gc, 0);
+    XFillRectangle(dpy, mask, gc, 0, 0, width, height);
+
+    XSetForeground(dpy, gc, 1);
+    int d = 2 * r;
+
+    XFillRectangle(dpy, mask, gc, 0, r, width, height - d);
+    XFillRectangle(dpy, mask, gc, r, 0, width - d, height);
+
+    XFillArc(dpy, mask, gc, 0, 0, d, d, 90 * 64, 90 * 64);
+    XFillArc(dpy, mask, gc, width - d, 0, d, d, 0, 90 * 64);
+    XFillArc(dpy, mask, gc, width - d, height - d, d, d, 270 * 64, 90 * 64);
+    XFillArc(dpy, mask, gc, 0, height - d, d, d, 180 * 64, 90 * 64);
+
+    XFreeGC(dpy, gc);
+    return mask;
+}
+
+void drawRoundedRectFrame(Display *dpy, Drawable d, GC gc,
+                          int x, int y, int w, int h, int r)
+{
+    if (r <= 0 || 2 * r > w || 2 * r > h) {
+        XDrawRectangle(dpy, d, gc, x, y, w, h);
+        return;
+    }
+
+    int d2 = 2 * r;
+
+    XDrawLine(dpy, d, gc, x + r, y, x + w - r, y);
+    XDrawLine(dpy, d, gc, x + w, y + r, x + w, y + h - r);
+    XDrawLine(dpy, d, gc, x + r, y + h, x + w - r, y + h);
+    XDrawLine(dpy, d, gc, x, y + r, x, y + h - r);
+
+    XDrawArc(dpy, d, gc, x, y, d2, d2, 90 * 64, 90 * 64);
+    XDrawArc(dpy, d, gc, x + w - d2, y, d2, d2, 0, 90 * 64);
+    XDrawArc(dpy, d, gc, x + w - d2, y + h - d2, d2, d2, 270 * 64, 90 * 64);
+    XDrawArc(dpy, d, gc, x, y + h - d2, d2, d2, 180 * 64, 90 * 64);
+}
+

@@ -120,4 +120,8 @@ int convert_msb(uint32_t in);
 CompositeConst initCompositeConst(unsigned long bg);
 uint32_t pixelComposite(uint32_t fg, uint8_t a, CompositeConst *cc);
 
+Pixmap createRoundedRectMask(int width, int height, int radius);
+void drawRoundedRectFrame(Display *dpy, Drawable d, GC gc,
+                          int x, int y, int w, int h, int r);
+
 #endif

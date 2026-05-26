@@ -40,6 +40,7 @@ along with alttab.  If not, see <http://www.gnu.org/licenses/>.
 #define DEFSPACING  0
 #define DEFTHEME    "hicolor"
 #define DEFFRAMEW   8
+#define DEFCORNER_RADIUS 0
 //#define DEFFONT   "xft:DejaVu Sans Condensed-10"
 #define DEFFONT     "xft:sans-10"
 
@@ -221,6 +222,8 @@ typedef struct {
     int option_frameW;
 #define SPACING_MIN_USER    0
     int option_spacing;
+#define CORNER_RADIUS_MIN_USER 0
+    int option_cornerRadius;
 } Globals;
 
 // gui

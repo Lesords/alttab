@@ -72,6 +72,9 @@ alttab.foreground:      #600000
 ! Extra spacing between tiles (pixels)
 !alttab.spacing:         8
 
+! Rounded corners radius (pixels)
+!alttab.cornerradius:   6
+
 ! Random dark frame around selected tile
 alttab.framecolor:      _rnd_low
 

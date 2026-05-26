@@ -29,6 +29,7 @@ along with alttab.  If not, see <http://www.gnu.org/licenses/>.
 //#include <sys/time.h>
 #include "alttab.h"
 #include "util.h"
+#include <X11/extensions/shape.h>
 extern Globals g;
 extern Display *dpy;
 extern int scr;
@@ -47,6 +48,8 @@ static Visual *visual;
 //Font fontLabel;  // Xft instead
 static XftFont *fontLabel;
 static int selNdx;                 // current (selected) item
+
+static Pixmap roundMask;
 
 //
 // allocates GC
@@ -114,11 +117,15 @@ static void drawFr(GC gc, int f)
         x = f * (tileW + frameW + g.option_spacing) + (frameW / 2);
         y = 0 + (frameW / 2);
     }
-    int d = XDrawRectangle(dpy, uiwin, gc,
-                           x, y,
-                           tileW + frameW, tileH + frameW);
-    if (!d) {
-        msg(-1, "can't draw frame\n");
+    int dw = tileW + frameW;
+    int dh = tileH + frameW;
+    if (g.option_cornerRadius > 0) {
+        drawRoundedRectFrame(dpy, uiwin, gc, x, y, dw, dh,
+                             g.option_cornerRadius);
+    } else {
+        int d = XDrawRectangle(dpy, uiwin, gc, x, y, dw, dh);
+        if (!d)
+            msg(-1, "can't draw frame\n");
     }
 }
 
@@ -343,9 +350,16 @@ static int placeSingleTile (int j) {
         dest_x = j * (tileW + frameW + g.option_spacing) + frameW;
         dest_y = frameW;
     }
-    r = XCopyArea(dpy, g.winlist[j].tile, uiwin,
-            g.gcDirect, 0, 0, tileW, tileH,   // src
-            dest_x, dest_y);    // dst
+    if (g.option_cornerRadius > 0 && roundMask) {
+        XSetClipMask(dpy, g.gcDirect, roundMask);
+        XSetClipOrigin(dpy, g.gcDirect, dest_x, dest_y);
+        r = XCopyArea(dpy, g.winlist[j].tile, uiwin,
+                g.gcDirect, 0, 0, tileW, tileH, dest_x, dest_y);
+        XSetClipMask(dpy, g.gcDirect, None);
+    } else {
+        r = XCopyArea(dpy, g.winlist[j].tile, uiwin,
+                g.gcDirect, 0, 0, tileW, tileH, dest_x, dest_y);
+    }
     //XSync (dpy, false);
     msg(1, "XCopyArea returned %d\n", r);
     return r;
@@ -714,6 +728,21 @@ int uiShow(bool direction)
     };
     XSetWMNormalHints(dpy, uiwin, &uiwinSizeHints);
 
+    if (g.option_cornerRadius > 0) {
+        int ev, err;
+        if (XShapeQueryExtension(dpy, &ev, &err)) {
+            roundMask = createRoundedRectMask(tileW, tileH, g.option_cornerRadius);
+            Pixmap winMask = createRoundedRectMask(uiwinW, uiwinH, g.option_cornerRadius);
+            if (winMask) {
+                XShapeCombineMask(dpy, uiwin, ShapeBounding, 0, 0, winMask, ShapeSet);
+                XFreePixmap(dpy, winMask);
+            }
+        } else {
+            msg(-1, "X Shape extension not available, disabling rounded corners\n");
+            g.option_cornerRadius = 0;
+        }
+    }
+
     return 1;
 }
 
@@ -747,6 +776,8 @@ void uiExpose(void)
                 "switcher window resized, expect bugs. Please configure WM to not interfere with alttab window size, for example, disable 'floating_maximum_size' in i3\n");
         }
     }
+    if (g.option_cornerRadius > 0)
+        XClearWindow(dpy, uiwin);
 // icons
     int j;
     for (j = 0; j < g.maxNdx; j++) {
@@ -791,6 +822,10 @@ int uiHide(void)
     }
     if (g.winlist) {
         freeWinlist();
+    }
+    if (roundMask) {
+        XFreePixmap(dpy, roundMask);
+        roundMask = 0;
     }
     g.uiShowHasRun = false;
     return 1;
