@@ -109,9 +109,9 @@ static void drawFr(GC gc, int f)
     int x, y;
     if (g.option_vertical) {
         x = 0 + (frameW / 2);
-        y = f * (tileH + frameW) + (frameW / 2);
+        y = f * (tileH + frameW + g.option_spacing) + (frameW / 2);
     } else {
-        x = f * (tileW + frameW) + (frameW / 2);
+        x = f * (tileW + frameW + g.option_spacing) + (frameW / 2);
         y = 0 + (frameW / 2);
     }
     int d = XDrawRectangle(dpy, uiwin, gc,
@@ -338,9 +338,9 @@ static int placeSingleTile (int j) {
     //XSync (dpy, false);
     if (g.option_vertical) {
         dest_x = frameW;
-        dest_y = j * (tileH + frameW) + frameW;
+        dest_y = j * (tileH + frameW + g.option_spacing) + frameW;
     } else {
-        dest_x = j * (tileW + frameW) + frameW;
+        dest_x = j * (tileW + frameW + g.option_spacing) + frameW;
         dest_y = frameW;
     }
     r = XCopyArea(dpy, g.winlist[j].tile, uiwin,
@@ -548,17 +548,21 @@ int uiShow(bool direction)
         avail_h -= g.option_posY;
     }
 // tiles may be smaller if they don't fit viewport
-    uiwinW = (tileW + frameW) * g.maxNdx + frameW;
+    uiwinW = (tileW + frameW) * g.maxNdx + frameW
+            + g.option_spacing * (g.maxNdx - 1);
     if (uiwinW > avail_w && !g.option_vertical) {
-        int frames = frameW * g.maxNdx + frameW;
+        int frames = frameW * (g.maxNdx + 1)
+                     + g.option_spacing * (g.maxNdx - 1);
         rt = ((float)(avail_w - frames)) / ((float)(tileW * g.maxNdx));
         tileW = (float)tileW *rt;
         tileH = (float)tileH *rt;
         uiwinW = tileW * g.maxNdx + frames;
     }
-    uiwinH = (tileH + frameW) * g.maxNdx + frameW;
+    uiwinH = (tileH + frameW) * g.maxNdx + frameW
+            + g.option_spacing * (g.maxNdx - 1);
     if (uiwinH > avail_h && g.option_vertical) {
-        int frames = frameW * g.maxNdx + frameW;
+        int frames = frameW * (g.maxNdx + 1)
+                     + g.option_spacing * (g.maxNdx - 1);
         rt = ((float)(avail_h - frames)) / ((float)(tileH * g.maxNdx));
         tileW = (float)tileW *rt;
         tileH = (float)tileH *rt;
@@ -590,10 +594,10 @@ int uiShow(bool direction)
 
     if (g.option_vertical) {
         visualTileW = uiwinW - frameW;
-        visualTileH = (uiwinH - frameW) / g.maxNdx;
+        visualTileH = tileH + frameW + g.option_spacing;
     } else {
         visualTileH = uiwinH - frameW;
-        visualTileW = (uiwinW - frameW) / g.maxNdx;
+        visualTileW = tileW + frameW + g.option_spacing;
     }
     if (g.debug > 0) {
         msg(0, "tile w=%d h=%d\n", tileW, tileH);

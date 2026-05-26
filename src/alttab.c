@@ -75,6 +75,7 @@ Options:\n\
    -bc color  extra border color\n\
    -bw N      extra border width\n\
    -fw N      active frame width\n\
+   -sp N      spacing between tiles\n\
  -font name   font name in the form xft:fontconfig_pattern\n\
  -vertical    vertical layout\n\
   -sortmin    sort minimized windows last\n\
@@ -139,6 +140,7 @@ static int use_args_and_xrm(int *argc, char **argv)
         {"-bc", "*bordercolor", XrmoptionSepArg, NULL},
         {"-bw", "*borderwidth", XrmoptionSepArg, NULL},
         {"-fw", "*framewidth", XrmoptionSepArg, NULL},
+        {"-sp", "*spacing", XrmoptionSepArg, NULL},
         {"-font", "*font", XrmoptionSepArg, NULL},
         {"-vertical", "*vertical", XrmoptionIsArg, NULL},
         {"-e", "*keep", XrmoptionIsArg, NULL},
@@ -395,6 +397,25 @@ static int use_args_and_xrm(int *argc, char **argv)
         break;
     }
     msg(0, "fw: %d\n", g.option_frameW);
+
+    {
+        unsigned int sp;
+        switch (xresource_load_int(&db, XRMAPPNAME, "spacing", &sp)) {
+        case 1:
+            if (sp >= SPACING_MIN_USER)
+              g.option_spacing = sp;
+            else
+              die(inv, "spacing argument range");
+            break;
+        case 0:
+            g.option_spacing = DEFSPACING;
+            break;
+        case -1:
+            die(inv, "spacing argument");
+            break;
+        }
+    }
+    msg(0, "spacing: %d\n", g.option_spacing);
 
     switch (xresource_load_int(&db, XRMAPPNAME, "borderwidth", &bw)) {
     case 1:

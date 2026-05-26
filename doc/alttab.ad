@@ -69,6 +69,9 @@ alttab.foreground:      #600000
 ! Thin frame around selected tile
 !alttab.framewidth:      4
 
+! Extra spacing between tiles (pixels)
+!alttab.spacing:         8
+
 ! Random dark frame around selected tile
 alttab.framecolor:      _rnd_low
 
