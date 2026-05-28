@@ -77,6 +77,7 @@ Options:\n\
    -fw N      active frame width\n\
    -sp N      spacing between tiles\n\
    -cr N      corner radius for rounded corners\n\
+   -pv NxM    preview size (e.g. 256x192)\n\
  -font name   font name in the form xft:fontconfig_pattern\n\
  -vertical    vertical layout\n\
   -sortmin    sort minimized windows last\n\
@@ -143,6 +144,7 @@ static int use_args_and_xrm(int *argc, char **argv)
         {"-fw", "*framewidth", XrmoptionSepArg, NULL},
         {"-sp", "*spacing", XrmoptionSepArg, NULL},
         {"-cr", "*cornerradius", XrmoptionSepArg, NULL},
+        {"-pv", "*preview.geometry", XrmoptionSepArg, NULL},
         {"-font", "*font", XrmoptionSepArg, NULL},
         {"-vertical", "*vertical", XrmoptionIsArg, NULL},
         {"-e", "*keep", XrmoptionIsArg, NULL},
@@ -437,6 +439,24 @@ static int use_args_and_xrm(int *argc, char **argv)
         }
     }
     msg(0, "cornerradius: %d\n", g.option_cornerRadius);
+
+    g.option_previewW = DEFPREVIEWW;
+    g.option_previewH = DEFPREVIEWH;
+    {
+        char *gpv = xresource_load_string(&db, XRMAPPNAME, "preview.geometry");
+        if (gpv) {
+            int xpg = XParseGeometry(gpv, &x, &y, &w, &h);
+            if (xpg & WidthValue)
+                g.option_previewW = w;
+            else
+                g.option_previewW = 256;
+            if (xpg & HeightValue)
+                g.option_previewH = h;
+            else
+                g.option_previewH = (g.option_previewW * 3) / 4;
+        }
+    }
+    msg(0, "preview: %dx%d\n", g.option_previewW, g.option_previewH);
 
     switch (xresource_load_int(&db, XRMAPPNAME, "borderwidth", &bw)) {
     case 1:
@@ -748,7 +768,11 @@ int main(int argc, char **argv)
 
         case Expose:
             if (g.uiShowHasRun) {
-                uiExpose();
+                if (ev.xexpose.window == getUiwin()) {
+                    uiExpose();
+                } else if (getPreviewWin() && ev.xexpose.window == getPreviewWin()) {
+                    uiPreviewExpose();
+                }
             }
             break;
 

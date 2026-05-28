@@ -36,6 +36,8 @@ along with alttab.  If not, see <http://www.gnu.org/licenses/>.
 #define DEFTILEH    128
 #define DEFICONW    32
 #define DEFICONH    32
+#define DEFPREVIEWW 0
+#define DEFPREVIEWH 0
 #define DEFBORDERW  0
 #define DEFSPACING  0
 #define DEFTHEME    "hicolor"
@@ -224,6 +226,8 @@ typedef struct {
     int option_spacing;
 #define CORNER_RADIUS_MIN_USER 0
     int option_cornerRadius;
+#define PREVIEW_MIN_USER 0
+    int option_previewW, option_previewH;
 } Globals;
 
 // gui
@@ -237,6 +241,8 @@ int uiKillWindow(void);
 int uiSelectWindow(int ndx);
 void uiButtonEvent(XButtonEvent e);
 Window getUiwin(void);
+Window getPreviewWin(void);
+void uiPreviewExpose(void);
 void shutdownGUI(void);
 
 // windows

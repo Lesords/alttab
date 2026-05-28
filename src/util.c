@@ -270,24 +270,65 @@ int pixmapFitXrender(Drawable src, Pixmap src_mask, Drawable dst,
                      unsigned int dstWoff, unsigned int dstHoff)
 {
     Picture Psrc, Pmask, Pdst;
-    XRenderPictFormat *format, *format_of_mask;
+    XRenderPictFormat *format_src, *format_dst, *format_of_mask;
     XTransform transform;
+    unsigned int src_depth = 0, dst_depth = 0;
+    Window root_return;
+    int x_return, y_return;
+    unsigned int w_return, h_return, bw_return;
 
-    format = XRenderFindVisualFormat(dpy, DefaultVisual(dpy, scr));
-    if (!format) {
-        fprintf(stderr, "error, couldn't find valid Xrender format\n");
+    if (!XGetGeometry(dpy, src, &root_return, &x_return, &y_return,
+                      &w_return, &h_return, &bw_return, &src_depth))
+        return 0;
+    if (!XGetGeometry(dpy, dst, &root_return, &x_return, &y_return,
+                      &w_return, &h_return, &bw_return, &dst_depth))
+        return 0;
+
+    switch (src_depth) {
+    case 32:
+        format_src = XRenderFindStandardFormat(dpy, PictStandardARGB32);
+        break;
+    case 24:
+        format_src = XRenderFindStandardFormat(dpy, PictStandardRGB24);
+        break;
+    default:
         return 0;
     }
+    switch (dst_depth) {
+    case 32:
+        format_dst = XRenderFindStandardFormat(dpy, PictStandardARGB32);
+        break;
+    case 24:
+        format_dst = XRenderFindStandardFormat(dpy, PictStandardRGB24);
+        break;
+    default:
+        return 0;
+    }
+    if (!format_src || !format_dst)
+        return 0;
+
     format_of_mask = XRenderFindStandardFormat(dpy, PictStandardA1);
-    if (!format_of_mask) {
-        fprintf(stderr, "error, couldn't find valid Xrender format for mask\n");
+    if (!format_of_mask)
+        return 0;
+
+    bool old = ee_complain;
+    ee_ignored = NULL;
+    ee_complain = false;
+
+    Psrc = XRenderCreatePicture(dpy, src, format_src, 0, NULL);
+    Pmask = (src_mask != 0) ? XRenderCreatePicture(dpy, src_mask,
+                                                   format_of_mask, 0, NULL) : 0;
+    Pdst = XRenderCreatePicture(dpy, dst, format_dst, 0, NULL);
+    XSync(dpy, False);
+    if (ee_ignored || !Psrc || !Pdst || (src_mask != 0 && !Pmask)) {
+        if (Psrc) XRenderFreePicture(dpy, Psrc);
+        if (Pdst) XRenderFreePicture(dpy, Pdst);
+        if (Pmask) XRenderFreePicture(dpy, Pmask);
+        ee_complain = old;
         return 0;
     }
-    Psrc = XRenderCreatePicture(dpy, src, format, 0, NULL);
-    Pmask =
-        (src_mask != 0) ? XRenderCreatePicture(dpy, src_mask,
-                                               format_of_mask, 0, NULL) : 0;
-    Pdst = XRenderCreatePicture(dpy, dst, format, 0, NULL);
+    ee_complain = old;
+
     XRenderSetPictureFilter(dpy, Psrc, FilterBilinear, 0, 0);
     if (Pmask != 0)
         XRenderSetPictureFilter(dpy, Pmask, FilterBilinear, 0, 0);
@@ -344,13 +385,13 @@ int pixmapFit(Drawable src, Pixmap src_mask, Drawable dst,
         dstHoff = (dstH - dstHscal) / 2;
     }
 
-    return XRenderQueryExtension(dpy, &event_basep, &error_basep) == True ?
-        pixmapFitXrender(src, src_mask, dst, srcW, srcH,
-                         dstWscal, dstHscal, dstWoff,
-                         dstHoff) : pixmapFitGeneric(src, src_mask, dst, srcW,
-                                                     srcH, dstWscal,
-                                                     dstHscal, dstWoff,
-                                                     dstHoff);
+    if (XRenderQueryExtension(dpy, &event_basep, &error_basep) == True) {
+        if (pixmapFitXrender(src, src_mask, dst, srcW, srcH,
+                             dstWscal, dstHscal, dstWoff, dstHoff))
+            return 1;
+    }
+    return pixmapFitGeneric(src, src_mask, dst, srcW, srcH,
+                            dstWscal, dstHscal, dstWoff, dstHoff);
 }
 
 //

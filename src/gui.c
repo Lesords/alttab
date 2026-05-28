@@ -30,6 +30,7 @@ along with alttab.  If not, see <http://www.gnu.org/licenses/>.
 #include "alttab.h"
 #include "util.h"
 #include <X11/extensions/shape.h>
+#include <X11/extensions/Xcomposite.h>
 extern Globals g;
 extern Display *dpy;
 extern int scr;
@@ -50,6 +51,10 @@ static XftFont *fontLabel;
 static int selNdx;                 // current (selected) item
 
 static Pixmap roundMask;
+
+static Window previewWin;
+static int previewW, previewH;
+static Pixmap previewPm;
 
 //
 // allocates GC
@@ -363,6 +368,119 @@ static int placeSingleTile (int j) {
     //XSync (dpy, false);
     msg(1, "XCopyArea returned %d\n", r);
     return r;
+}
+
+
+//
+// update preview window content for given winlist index
+//
+static void updatePreview(int ndx)
+{
+    if (!previewWin || !previewPm)
+        return;
+    WindowInfo *wi = &g.winlist[ndx];
+    if (wi->id == getUiwin() || wi->id == 0)
+        return;
+
+    XFillRectangle(dpy, previewPm, g.gcReverse, 0, 0, previewW, previewH);
+
+    unsigned int srcW = 0, srcH = 0;
+    Drawable src = None;
+
+    // Try Composite NameWindowPixmap first (best for obscured/minimized windows)
+    XSync(dpy, False);
+    ee_ignored = NULL;
+    ee_complain = false;
+    Pixmap named = XCompositeNameWindowPixmap(dpy, wi->id);
+    XSync(dpy, False);
+    bool haveComposite = (!ee_ignored && named != None);
+    ee_complain = true;
+    ee_ignored = NULL;
+
+    if (haveComposite) {
+        Window rr;
+        int xr, yr;
+        unsigned int bw, depth;
+        if (XGetGeometry(dpy, named, &rr, &xr, &yr, &srcW, &srcH, &bw, &depth)
+            && srcW > 0 && srcH > 0) {
+            src = named;
+        } else {
+            XFreePixmap(dpy, named);
+            named = None;
+        }
+    }
+
+    // Fallback: use the window drawable directly
+    if (src == None) {
+        XWindowAttributes wa;
+        if (XGetWindowAttributes(dpy, wi->id, &wa) && wa.map_state == IsViewable
+            && wa.width > 0 && wa.height > 0) {
+            srcW = wa.width;
+            srcH = wa.height;
+            src = wi->id;
+        }
+    }
+
+    if (srcW > 0 && srcH > 0)
+        pixmapFit(src, None, previewPm, srcW, srcH, previewW, previewH);
+
+    if (named != None) {
+        XSync(dpy, False);
+        ee_ignored = NULL;
+        ee_complain = false;
+        XFreePixmap(dpy, named);
+        XSync(dpy, False);
+        ee_ignored = NULL;
+        ee_complain = true;
+    }
+}
+
+//
+// position preview window relative to selected tile
+//
+static void positionPreview(int ndx)
+{
+    if (!previewWin)
+        return;
+
+    int tx, ty;
+    int margin = 6;
+    if (g.option_vertical) {
+        tx = uiwinX + uiwinW + margin;
+        ty = uiwinY + ndx * (tileH + frameW + g.option_spacing) + frameW + tileH / 2 - previewH / 2;
+    } else {
+        tx = uiwinX + ndx * (tileW + frameW + g.option_spacing) + frameW + tileW / 2 - previewW / 2;
+        ty = uiwinY + uiwinH + margin;
+    }
+
+    int pvX = tx;
+    int pvY = ty;
+
+    if (g.option_vertical) {
+        if (pvX + previewW > g.vp.x + g.vp.w)
+            pvX = uiwinX - previewW - margin;
+    } else {
+        if (pvY + previewH > g.vp.y + g.vp.h)
+            pvY = uiwinY - previewH - margin;
+    }
+    if (pvY < g.vp.y)
+        pvY = g.vp.y;
+    if (pvX + previewW > g.vp.x + g.vp.w)
+        pvX = g.vp.x + g.vp.w - previewW;
+    if (pvX < g.vp.x)
+        pvX = g.vp.x;
+
+    XMoveWindow(dpy, previewWin, pvX, pvY);
+}
+
+//
+// redraw preview window content from backing pixmap
+//
+void uiPreviewExpose(void)
+{
+    if (!previewWin || !previewPm)
+        return;
+    XCopyArea(dpy, previewPm, previewWin, g.gcDirect, 0, 0, previewW, previewH, 0, 0);
 }
 
 
@@ -743,6 +861,50 @@ int uiShow(bool direction)
         }
     }
 
+    previewW = g.option_previewW;
+    previewH = g.option_previewH;
+    previewWin = 0;
+    previewPm = 0;
+    if (previewW > 0 && previewH > 0) {
+        int cev, cerr;
+        if (XCompositeQueryExtension(dpy, &cev, &cerr)) {
+            unsigned long pv_valuemask = CWBackPixel | CWOverrideRedirect;
+            XSetWindowAttributes pv_attr;
+            pv_attr.background_pixel = g.color[COLBG].xcolor.pixel;
+            pv_attr.override_redirect = 1;
+            previewWin = XCreateWindow(dpy, root, 0, 0, previewW, previewH, 0,
+                                       CopyFromParent, InputOutput, CopyFromParent,
+                                       pv_valuemask, &pv_attr);
+            if (previewWin) {
+                XStoreName(dpy, previewWin, "alttab-preview");
+                XSelectInput(dpy, previewWin, ExposureMask);
+                previewPm = XCreatePixmap(dpy, root, previewW, previewH, XDEPTH);
+                if (!previewPm) {
+                    XDestroyWindow(dpy, previewWin);
+                    previewWin = 0;
+                    msg(-1, "can't create preview pixmap\n");
+                } else {
+                    XFillRectangle(dpy, previewPm, g.gcReverse, 0, 0, previewW, previewH);
+                    if (g.option_cornerRadius > 0) {
+                        Pixmap pvMask = createRoundedRectMask(previewW, previewH, g.option_cornerRadius);
+                        if (pvMask) {
+                            XShapeCombineMask(dpy, previewWin, ShapeBounding, 0, 0, pvMask, ShapeSet);
+                            XFreePixmap(dpy, pvMask);
+                        }
+                    }
+                    positionPreview(selNdx);
+                    updatePreview(selNdx);
+                    XMapWindow(dpy, previewWin);
+                    XCopyArea(dpy, previewPm, previewWin, g.gcDirect, 0, 0, previewW, previewH, 0, 0);
+                    msg(0, "preview window 0x%lx %dx%d\n", previewWin, previewW, previewH);
+                }
+            }
+        } else {
+            msg(-1, "X Composite extension not available, disabling preview\n");
+            previewW = previewH = 0;
+        }
+    }
+
     return 1;
 }
 
@@ -827,6 +989,15 @@ int uiHide(void)
         XFreePixmap(dpy, roundMask);
         roundMask = 0;
     }
+    if (previewPm) {
+        XFreePixmap(dpy, previewPm);
+        previewPm = 0;
+    }
+    if (previewWin) {
+        XUnmapWindow(dpy, previewWin);
+        XDestroyWindow(dpy, previewWin);
+        previewWin = 0;
+    }
     g.uiShowHasRun = false;
     return 1;
 }
@@ -843,6 +1014,11 @@ int uiNextWindow(void)
         selNdx = 0;
     msg(0, "item %d\n", selNdx);
     framesRedraw();
+    if (previewWin) {
+        positionPreview(selNdx);
+        updatePreview(selNdx);
+        XCopyArea(dpy, previewPm, previewWin, g.gcDirect, 0, 0, previewW, previewH, 0, 0);
+    }
     return 1;
 }
 
@@ -858,6 +1034,11 @@ int uiPrevWindow(void)
         selNdx = g.maxNdx - 1;
     msg(0, "item %d\n", selNdx);
     framesRedraw();
+    if (previewWin) {
+        positionPreview(selNdx);
+        updatePreview(selNdx);
+        XCopyArea(dpy, previewPm, previewWin, g.gcDirect, 0, 0, previewW, previewH, 0, 0);
+    }
     return 1;
 }
 
@@ -905,6 +1086,11 @@ int uiSelectWindow(int ndx)
     selNdx = ndx;
     msg(0, "item %d\n", selNdx);
     framesRedraw();
+    if (previewWin) {
+        positionPreview(selNdx);
+        updatePreview(selNdx);
+        XCopyArea(dpy, previewPm, previewWin, g.gcDirect, 0, 0, previewW, previewH, 0, 0);
+    }
     return 1;
 }
 
@@ -942,6 +1128,11 @@ void uiButtonEvent(XButtonEvent e)
 Window getUiwin(void)
 {
     return uiwin;
+}
+
+Window getPreviewWin(void)
+{
+    return previewWin;
 }
 
 void shutdownGUI(void)
