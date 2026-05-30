@@ -75,9 +75,10 @@ Options:\n\
    -bc color  extra border color\n\
    -bw N      extra border width\n\
    -fw N      active frame width\n\
-   -sp N      spacing between tiles\n\
+    -sp N      spacing between tiles\n\
+    -wp N      window inner padding\n\
    -cr N      corner radius for rounded corners\n\
-   -pv NxM    preview size (e.g. 256x192)\n\
+    -pv       show window content in tiles\n\
  -font name   font name in the form xft:fontconfig_pattern\n\
  -vertical    vertical layout\n\
   -sortmin    sort minimized windows last\n\
@@ -143,8 +144,9 @@ static int use_args_and_xrm(int *argc, char **argv)
         {"-bw", "*borderwidth", XrmoptionSepArg, NULL},
         {"-fw", "*framewidth", XrmoptionSepArg, NULL},
         {"-sp", "*spacing", XrmoptionSepArg, NULL},
+        {"-wp", "*windowpadding", XrmoptionSepArg, NULL},
         {"-cr", "*cornerradius", XrmoptionSepArg, NULL},
-        {"-pv", "*preview.geometry", XrmoptionSepArg, NULL},
+        {"-pv", "*preview.geometry", XrmoptionNoArg, "1"},
         {"-font", "*font", XrmoptionSepArg, NULL},
         {"-vertical", "*vertical", XrmoptionIsArg, NULL},
         {"-e", "*keep", XrmoptionIsArg, NULL},
@@ -422,6 +424,25 @@ static int use_args_and_xrm(int *argc, char **argv)
     msg(0, "spacing: %d\n", g.option_spacing);
 
     {
+        unsigned int wp;
+        switch (xresource_load_int(&db, XRMAPPNAME, "windowpadding", &wp)) {
+        case 1:
+            if (wp >= WPAD_MIN_USER)
+                g.option_winPad = wp;
+            else
+                die(inv, "windowpadding argument range");
+            break;
+        case 0:
+            g.option_winPad = 0;
+            break;
+        case -1:
+            die(inv, "windowpadding argument");
+            break;
+        }
+    }
+    msg(0, "windowpadding: %d\n", g.option_winPad);
+
+    {
         unsigned int cr;
         switch (xresource_load_int(&db, XRMAPPNAME, "cornerradius", &cr)) {
         case 1:
@@ -440,23 +461,12 @@ static int use_args_and_xrm(int *argc, char **argv)
     }
     msg(0, "cornerradius: %d\n", g.option_cornerRadius);
 
-    g.option_previewW = DEFPREVIEWW;
-    g.option_previewH = DEFPREVIEWH;
+    g.option_preview = false;
     {
-        char *gpv = xresource_load_string(&db, XRMAPPNAME, "preview.geometry");
-        if (gpv) {
-            int xpg = XParseGeometry(gpv, &x, &y, &w, &h);
-            if (xpg & WidthValue)
-                g.option_previewW = w;
-            else
-                g.option_previewW = 256;
-            if (xpg & HeightValue)
-                g.option_previewH = h;
-            else
-                g.option_previewH = (g.option_previewW * 3) / 4;
-        }
+        char *s = xresource_load_string(&db, XRMAPPNAME, "preview.geometry");
+        g.option_preview = (s != NULL);
     }
-    msg(0, "preview: %dx%d\n", g.option_previewW, g.option_previewH);
+    msg(0, "preview: %d\n", g.option_preview);
 
     switch (xresource_load_int(&db, XRMAPPNAME, "borderwidth", &bw)) {
     case 1:
@@ -767,13 +777,8 @@ int main(int argc, char **argv)
             break;
 
         case Expose:
-            if (g.uiShowHasRun) {
-                if (ev.xexpose.window == getUiwin()) {
-                    uiExpose();
-                } else if (getPreviewWin() && ev.xexpose.window == getPreviewWin()) {
-                    uiPreviewExpose();
-                }
-            }
+            if (g.uiShowHasRun && ev.xexpose.window == getUiwin())
+                uiExpose();
             break;
 
         case ButtonPress:

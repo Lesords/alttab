@@ -41,6 +41,7 @@ extern Window root;
 static unsigned int tileW, tileH, iconW, iconH;
 static unsigned int visualTileW, visualTileH;
 static int lastPressedTile;
+static int cols, rows;
 static quad scrdim;
 static Window uiwin;
 static int uiwinW, uiwinH, uiwinX, uiwinY;
@@ -51,10 +52,6 @@ static XftFont *fontLabel;
 static int selNdx;                 // current (selected) item
 
 static Pixmap roundMask;
-
-static Window previewWin;
-static int previewW, previewH;
-static Pixmap previewPm;
 
 //
 // allocates GC
@@ -114,14 +111,16 @@ static GC create_gc(int type)
 //
 static void drawFr(GC gc, int f)
 {
-    int x, y;
+    int x, y, col, row;
     if (g.option_vertical) {
-        x = 0 + (frameW / 2);
-        y = f * (tileH + frameW + g.option_spacing) + (frameW / 2);
+        col = f / rows;
+        row = f % rows;
     } else {
-        x = f * (tileW + frameW + g.option_spacing) + (frameW / 2);
-        y = 0 + (frameW / 2);
+        col = f % cols;
+        row = f / cols;
     }
+    x = col * (tileW + frameW + g.option_spacing) + (frameW / 2) + g.option_winPad;
+    y = row * (tileH + frameW + g.option_spacing) + (frameW / 2) + g.option_winPad;
     int dw = tileW + frameW;
     int dh = tileH + frameW;
     if (g.option_cornerRadius > 0) {
@@ -160,19 +159,21 @@ static void framesRedraw(void)
 //
 static int pointedTile(int x, int y)
 {
-    if (g.option_vertical) {
-        if (y < (frameW / 2)
-            || y > (uiwinH - (frameW / 2))
-            || x < 0 || x > uiwinW)
-            return -1;
-        return (y - (frameW / 2)) / visualTileH;
-    } else {
-        if (x < (frameW / 2)
-            || x > (uiwinW - (frameW / 2))
-            || y < 0 || y > uiwinH)
-            return -1;
-        return (x - (frameW / 2)) / visualTileW;
-    }
+    int marg = frameW / 2 + g.option_winPad;
+    if (x < marg || y < marg
+        || (unsigned int)x > uiwinW - marg
+        || (unsigned int)y > uiwinH - marg)
+        return -1;
+    int pc = (x - marg) / visualTileW;
+    int pr = (y - marg) / visualTileH;
+    int idx;
+    if (g.option_vertical)
+        idx = pc * rows + pr;
+    else
+        idx = pr * cols + pc;
+    if (idx >= 0 && idx < g.maxNdx)
+        return idx;
+    return -1;
 }
 
 //
@@ -192,10 +193,103 @@ static void prepareTile(WindowInfo * wi)
     if (!fr) {
         msg(-1, "can't fill tile\n");
     }
-    // mini-window content could be drawn here,
-    // but there is no backing store of windows
-    // in my simple environments (as reported by xwininfo)
-    //
+
+    // In-tile preview: render window content instead of icon
+    if (g.option_preview) {
+        unsigned int srcW = 0, srcH = 0;
+        Drawable src = None;
+
+        XSync(dpy, False);
+        ee_ignored = NULL;
+        ee_complain = false;
+        Pixmap named = XCompositeNameWindowPixmap(dpy, wi->id);
+        XSync(dpy, False);
+        bool haveComposite = (!ee_ignored && named != None);
+        ee_complain = true;
+        ee_ignored = NULL;
+
+        if (haveComposite) {
+            Window rr;
+            int xr, yr;
+            unsigned int bw, depth;
+            if (XGetGeometry(dpy, named, &rr, &xr, &yr, &srcW, &srcH, &bw, &depth)
+                && srcW > 0 && srcH > 0) {
+                src = named;
+            } else {
+                XFreePixmap(dpy, named);
+                named = None;
+            }
+        }
+
+        if (src == None) {
+            XWindowAttributes wa;
+            if (XGetWindowAttributes(dpy, wi->id, &wa) && wa.map_state == IsViewable
+                && wa.width > 0 && wa.height > 0) {
+                srcW = wa.width;
+                srcH = wa.height;
+                src = wi->id;
+            }
+        }
+
+        if (srcW > 0 && srcH > 0)
+            pixmapFit(src, None, wi->tile, srcW, srcH, tileW, tileH);
+
+        if (named != None) {
+            XSync(dpy, False);
+            ee_ignored = NULL;
+            ee_complain = false;
+            XFreePixmap(dpy, named);
+            XSync(dpy, False);
+            ee_ignored = NULL;
+            ee_complain = true;
+        }
+
+        // Top info strip
+        if (wi->name[0] && fontLabel) {
+            XGlyphInfo te;
+            XftTextExtentsUtf8(dpy, fontLabel,
+                (unsigned char *)(wi->name), strlen(wi->name), &te);
+            int pad = 6;
+            int stripH = te.height + pad * 2;
+            if (stripH < 22) stripH = 22;
+            if (wi->bottom_line[0]) {
+                XftTextExtentsUtf8(dpy, fontLabel,
+                    (unsigned char *)(wi->bottom_line),
+                    strlen(wi->bottom_line), &ext);
+                int blH = ext.height + pad * 2;
+                if (blH > stripH) stripH = blH;
+            }
+            if (stripH > tileH / 2)
+                stripH = tileH / 2;
+            GC tgc = XCreateGC(dpy, root, 0, NULL);
+            XSetForeground(dpy, tgc, g.color[COLINACT].xcolor.pixel);
+            XSetFillStyle(dpy, tgc, FillSolid);
+            XFillRectangle(dpy, wi->tile, tgc, 0, 0, tileW, stripH);
+            // separator line below strip
+            XSetForeground(dpy, tgc, g.color[COLFRAME].xcolor.pixel);
+            XFillRectangle(dpy, wi->tile, tgc, 0, stripH, tileW, 1);
+            XFreeGC(dpy, tgc);
+            // title text: left-aligned with padding
+            int textY = pad - 2;
+            if (textY < 0) textY = 0;
+            drawSingleLine(wi->tile, fontLabel, &(g.color[COLFG].xftcolor),
+                           wi->name, 8, textY, tileW / 2, te.height);
+            // bottom line: right-aligned in same strip
+            if (wi->bottom_line[0]) {
+                XftTextExtentsUtf8(dpy, fontLabel,
+                    (unsigned char *)(wi->bottom_line),
+                    strlen(wi->bottom_line), &ext);
+                if (ext.width < tileW / 2) {
+                    int bx = tileW - ext.width - 8;
+                    drawSingleLine(wi->tile, fontLabel, &(g.color[COLFG].xftcolor),
+                                   wi->bottom_line, bx, textY, ext.width, ext.height);
+                }
+            }
+        }
+
+        goto endTile;
+    }
+
     // place icons
     if (g.option_iconSrc == ISRC_NONE)
         goto endIcon;
@@ -306,6 +400,7 @@ endBottomLine:
             msg(-1, "can't draw label\n");
         }
     }
+endTile:
 }                               // prepareTile
 
 //
@@ -346,15 +441,17 @@ static int placeSingleTile (int j) {
 
     if (! g.winlist[j].tile)
         return -1;
-    msg(1, "copying tile %d to canvas\n", j);
-    //XSync (dpy, false);
+    int col, row;
     if (g.option_vertical) {
-        dest_x = frameW;
-        dest_y = j * (tileH + frameW + g.option_spacing) + frameW;
+        col = j / rows;
+        row = j % rows;
     } else {
-        dest_x = j * (tileW + frameW + g.option_spacing) + frameW;
-        dest_y = frameW;
+        col = j % cols;
+        row = j / cols;
     }
+    msg(1, "copying tile %d (col=%d row=%d) to canvas\n", j, col, row);
+    dest_x = col * (tileW + frameW + g.option_spacing) + frameW + g.option_winPad;
+    dest_y = row * (tileH + frameW + g.option_spacing) + frameW + g.option_winPad;
     if (g.option_cornerRadius > 0 && roundMask) {
         XSetClipMask(dpy, g.gcDirect, roundMask);
         XSetClipOrigin(dpy, g.gcDirect, dest_x, dest_y);
@@ -368,119 +465,6 @@ static int placeSingleTile (int j) {
     //XSync (dpy, false);
     msg(1, "XCopyArea returned %d\n", r);
     return r;
-}
-
-
-//
-// update preview window content for given winlist index
-//
-static void updatePreview(int ndx)
-{
-    if (!previewWin || !previewPm)
-        return;
-    WindowInfo *wi = &g.winlist[ndx];
-    if (wi->id == getUiwin() || wi->id == 0)
-        return;
-
-    XFillRectangle(dpy, previewPm, g.gcReverse, 0, 0, previewW, previewH);
-
-    unsigned int srcW = 0, srcH = 0;
-    Drawable src = None;
-
-    // Try Composite NameWindowPixmap first (best for obscured/minimized windows)
-    XSync(dpy, False);
-    ee_ignored = NULL;
-    ee_complain = false;
-    Pixmap named = XCompositeNameWindowPixmap(dpy, wi->id);
-    XSync(dpy, False);
-    bool haveComposite = (!ee_ignored && named != None);
-    ee_complain = true;
-    ee_ignored = NULL;
-
-    if (haveComposite) {
-        Window rr;
-        int xr, yr;
-        unsigned int bw, depth;
-        if (XGetGeometry(dpy, named, &rr, &xr, &yr, &srcW, &srcH, &bw, &depth)
-            && srcW > 0 && srcH > 0) {
-            src = named;
-        } else {
-            XFreePixmap(dpy, named);
-            named = None;
-        }
-    }
-
-    // Fallback: use the window drawable directly
-    if (src == None) {
-        XWindowAttributes wa;
-        if (XGetWindowAttributes(dpy, wi->id, &wa) && wa.map_state == IsViewable
-            && wa.width > 0 && wa.height > 0) {
-            srcW = wa.width;
-            srcH = wa.height;
-            src = wi->id;
-        }
-    }
-
-    if (srcW > 0 && srcH > 0)
-        pixmapFit(src, None, previewPm, srcW, srcH, previewW, previewH);
-
-    if (named != None) {
-        XSync(dpy, False);
-        ee_ignored = NULL;
-        ee_complain = false;
-        XFreePixmap(dpy, named);
-        XSync(dpy, False);
-        ee_ignored = NULL;
-        ee_complain = true;
-    }
-}
-
-//
-// position preview window relative to selected tile
-//
-static void positionPreview(int ndx)
-{
-    if (!previewWin)
-        return;
-
-    int tx, ty;
-    int margin = 6;
-    if (g.option_vertical) {
-        tx = uiwinX + uiwinW + margin;
-        ty = uiwinY + ndx * (tileH + frameW + g.option_spacing) + frameW + tileH / 2 - previewH / 2;
-    } else {
-        tx = uiwinX + ndx * (tileW + frameW + g.option_spacing) + frameW + tileW / 2 - previewW / 2;
-        ty = uiwinY + uiwinH + margin;
-    }
-
-    int pvX = tx;
-    int pvY = ty;
-
-    if (g.option_vertical) {
-        if (pvX + previewW > g.vp.x + g.vp.w)
-            pvX = uiwinX - previewW - margin;
-    } else {
-        if (pvY + previewH > g.vp.y + g.vp.h)
-            pvY = uiwinY - previewH - margin;
-    }
-    if (pvY < g.vp.y)
-        pvY = g.vp.y;
-    if (pvX + previewW > g.vp.x + g.vp.w)
-        pvX = g.vp.x + g.vp.w - previewW;
-    if (pvX < g.vp.x)
-        pvX = g.vp.x;
-
-    XMoveWindow(dpy, previewWin, pvX, pvY);
-}
-
-//
-// redraw preview window content from backing pixmap
-//
-void uiPreviewExpose(void)
-{
-    if (!previewWin || !previewPm)
-        return;
-    XCopyArea(dpy, previewPm, previewWin, g.gcDirect, 0, 0, previewW, previewH, 0, 0);
 }
 
 
@@ -679,27 +663,24 @@ int uiShow(bool direction)
         avail_w -= g.option_posX;
         avail_h -= g.option_posY;
     }
-// tiles may be smaller if they don't fit viewport
-    uiwinW = (tileW + frameW) * g.maxNdx + frameW
-            + g.option_spacing * (g.maxNdx - 1);
-    if (uiwinW > avail_w && !g.option_vertical) {
-        int frames = frameW * (g.maxNdx + 1)
-                     + g.option_spacing * (g.maxNdx - 1);
-        rt = ((float)(avail_w - frames)) / ((float)(tileW * g.maxNdx));
-        tileW = (float)tileW *rt;
-        tileH = (float)tileH *rt;
-        uiwinW = tileW * g.maxNdx + frames;
+// calculate multi-row/column grid (fixed tile size)
+    if (g.option_vertical) {
+        rows = (avail_h - frameW - 2 * g.option_winPad + g.option_spacing)
+             / (tileH + frameW + g.option_spacing);
+        if (rows < 1) rows = 1;
+        if (rows > g.maxNdx) rows = g.maxNdx;
+        cols = (g.maxNdx + rows - 1) / rows;
+    } else {
+        cols = (avail_w - frameW - 2 * g.option_winPad + g.option_spacing)
+             / (tileW + frameW + g.option_spacing);
+        if (cols < 1) cols = 1;
+        if (cols > g.maxNdx) cols = g.maxNdx;
+        rows = (g.maxNdx + cols - 1) / cols;
     }
-    uiwinH = (tileH + frameW) * g.maxNdx + frameW
-            + g.option_spacing * (g.maxNdx - 1);
-    if (uiwinH > avail_h && g.option_vertical) {
-        int frames = frameW * (g.maxNdx + 1)
-                     + g.option_spacing * (g.maxNdx - 1);
-        rt = ((float)(avail_h - frames)) / ((float)(tileH * g.maxNdx));
-        tileW = (float)tileW *rt;
-        tileH = (float)tileH *rt;
-        uiwinH = tileH * g.maxNdx + frames;
-    }
+    uiwinW = cols * tileW + (cols + 1) * frameW
+             + g.option_spacing * (cols - 1) + 2 * g.option_winPad;
+    uiwinH = rows * tileH + (rows + 1) * frameW
+             + g.option_spacing * (rows - 1) + 2 * g.option_winPad;
 // icon may be smaller if it doesn't fit tile
     if (iconW > tileW) {
         rt = (float)tileW / (float)iconW;
@@ -711,10 +692,6 @@ int uiShow(bool direction)
         iconH = tileH;
         iconW = rt * iconW;
     }
-    if (g.option_vertical)
-        uiwinW = tileW + 2 * frameW;
-    else
-        uiwinH = tileH + 2 * frameW;
 
     if (g.option_positioning == POS_CENTER) {
         uiwinX = (g.vp.w - uiwinW) / 2 + g.vp.x;
@@ -724,13 +701,8 @@ int uiShow(bool direction)
         uiwinY = g.option_posY + g.vp.y;
     }
 
-    if (g.option_vertical) {
-        visualTileW = uiwinW - frameW;
-        visualTileH = tileH + frameW + g.option_spacing;
-    } else {
-        visualTileH = uiwinH - frameW;
-        visualTileW = tileW + frameW + g.option_spacing;
-    }
+    visualTileW = tileW + frameW + g.option_spacing;
+    visualTileH = tileH + frameW + g.option_spacing;
     if (g.debug > 0) {
         msg(0, "tile w=%d h=%d\n", tileW, tileH);
         msg(0, "uiwin %dx%d +%d+%d", uiwinW, uiwinH, uiwinX, uiwinY);
@@ -861,50 +833,6 @@ int uiShow(bool direction)
         }
     }
 
-    previewW = g.option_previewW;
-    previewH = g.option_previewH;
-    previewWin = 0;
-    previewPm = 0;
-    if (previewW > 0 && previewH > 0) {
-        int cev, cerr;
-        if (XCompositeQueryExtension(dpy, &cev, &cerr)) {
-            unsigned long pv_valuemask = CWBackPixel | CWOverrideRedirect;
-            XSetWindowAttributes pv_attr;
-            pv_attr.background_pixel = g.color[COLBG].xcolor.pixel;
-            pv_attr.override_redirect = 1;
-            previewWin = XCreateWindow(dpy, root, 0, 0, previewW, previewH, 0,
-                                       CopyFromParent, InputOutput, CopyFromParent,
-                                       pv_valuemask, &pv_attr);
-            if (previewWin) {
-                XStoreName(dpy, previewWin, "alttab-preview");
-                XSelectInput(dpy, previewWin, ExposureMask);
-                previewPm = XCreatePixmap(dpy, root, previewW, previewH, XDEPTH);
-                if (!previewPm) {
-                    XDestroyWindow(dpy, previewWin);
-                    previewWin = 0;
-                    msg(-1, "can't create preview pixmap\n");
-                } else {
-                    XFillRectangle(dpy, previewPm, g.gcReverse, 0, 0, previewW, previewH);
-                    if (g.option_cornerRadius > 0) {
-                        Pixmap pvMask = createRoundedRectMask(previewW, previewH, g.option_cornerRadius);
-                        if (pvMask) {
-                            XShapeCombineMask(dpy, previewWin, ShapeBounding, 0, 0, pvMask, ShapeSet);
-                            XFreePixmap(dpy, pvMask);
-                        }
-                    }
-                    positionPreview(selNdx);
-                    updatePreview(selNdx);
-                    XMapWindow(dpy, previewWin);
-                    XCopyArea(dpy, previewPm, previewWin, g.gcDirect, 0, 0, previewW, previewH, 0, 0);
-                    msg(0, "preview window 0x%lx %dx%d\n", previewWin, previewW, previewH);
-                }
-            }
-        } else {
-            msg(-1, "X Composite extension not available, disabling preview\n");
-            previewW = previewH = 0;
-        }
-    }
-
     return 1;
 }
 
@@ -989,15 +917,6 @@ int uiHide(void)
         XFreePixmap(dpy, roundMask);
         roundMask = 0;
     }
-    if (previewPm) {
-        XFreePixmap(dpy, previewPm);
-        previewPm = 0;
-    }
-    if (previewWin) {
-        XUnmapWindow(dpy, previewWin);
-        XDestroyWindow(dpy, previewWin);
-        previewWin = 0;
-    }
     g.uiShowHasRun = false;
     return 1;
 }
@@ -1014,11 +933,6 @@ int uiNextWindow(void)
         selNdx = 0;
     msg(0, "item %d\n", selNdx);
     framesRedraw();
-    if (previewWin) {
-        positionPreview(selNdx);
-        updatePreview(selNdx);
-        XCopyArea(dpy, previewPm, previewWin, g.gcDirect, 0, 0, previewW, previewH, 0, 0);
-    }
     return 1;
 }
 
@@ -1028,17 +942,12 @@ int uiNextWindow(void)
 int uiPrevWindow(void)
 {
     if (!uiwin)
-        return 0;               // kb events may trigger it even when no window drawn yet
+        return 0;
     selNdx--;
     if (selNdx < 0)
         selNdx = g.maxNdx - 1;
     msg(0, "item %d\n", selNdx);
     framesRedraw();
-    if (previewWin) {
-        positionPreview(selNdx);
-        updatePreview(selNdx);
-        XCopyArea(dpy, previewPm, previewWin, g.gcDirect, 0, 0, previewW, previewH, 0, 0);
-    }
     return 1;
 }
 
@@ -1086,11 +995,6 @@ int uiSelectWindow(int ndx)
     selNdx = ndx;
     msg(0, "item %d\n", selNdx);
     framesRedraw();
-    if (previewWin) {
-        positionPreview(selNdx);
-        updatePreview(selNdx);
-        XCopyArea(dpy, previewPm, previewWin, g.gcDirect, 0, 0, previewW, previewH, 0, 0);
-    }
     return 1;
 }
 
@@ -1128,11 +1032,6 @@ void uiButtonEvent(XButtonEvent e)
 Window getUiwin(void)
 {
     return uiwin;
-}
-
-Window getPreviewWin(void)
-{
-    return previewWin;
 }
 
 void shutdownGUI(void)
