@@ -324,6 +324,7 @@ int pixmapFitXrender(Drawable src, Pixmap src_mask, Drawable dst,
         if (Psrc) XRenderFreePicture(dpy, Psrc);
         if (Pdst) XRenderFreePicture(dpy, Pdst);
         if (Pmask) XRenderFreePicture(dpy, Pmask);
+        XSync(dpy, False);  // drain deferred errors while still suppressed
         ee_complain = old;
         return 0;
     }

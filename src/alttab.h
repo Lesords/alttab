@@ -227,6 +227,10 @@ typedef struct {
     int option_cornerRadius;
 #define WPAD_MIN_USER       0
     int option_winPad;
+#define LAYOUT_GRID     0
+#define LAYOUT_STACK    1
+#define LAYOUT_DEFAULT  LAYOUT_GRID
+    int option_layout;
 } Globals;
 
 // gui

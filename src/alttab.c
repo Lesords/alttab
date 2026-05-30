@@ -144,6 +144,7 @@ static int use_args_and_xrm(int *argc, char **argv)
         {"-bw", "*borderwidth", XrmoptionSepArg, NULL},
         {"-fw", "*framewidth", XrmoptionSepArg, NULL},
         {"-sp", "*spacing", XrmoptionSepArg, NULL},
+        {"-layout", "*layout", XrmoptionSepArg, NULL},
         {"-wp", "*windowpadding", XrmoptionSepArg, NULL},
         {"-cr", "*cornerradius", XrmoptionSepArg, NULL},
         {"-pv", "*preview.geometry", XrmoptionNoArg, "1"},
@@ -467,6 +468,20 @@ static int use_args_and_xrm(int *argc, char **argv)
         g.option_preview = (s != NULL);
     }
     msg(0, "preview: %d\n", g.option_preview);
+
+    g.option_layout = LAYOUT_DEFAULT;
+    {
+        char *s = xresource_load_string(&db, XRMAPPNAME, "layout");
+        if (s) {
+            if (strcasecmp(s, "grid") == 0)
+                g.option_layout = LAYOUT_GRID;
+            else if (strcasecmp(s, "stack") == 0)
+                g.option_layout = LAYOUT_STACK;
+            else
+                msg(-1, "unknown layout '%s', using default\n", s);
+        }
+    }
+    msg(0, "layout: %d\n", g.option_layout);
 
     switch (xresource_load_int(&db, XRMAPPNAME, "borderwidth", &bw)) {
     case 1:

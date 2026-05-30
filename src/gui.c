@@ -52,6 +52,7 @@ static XftFont *fontLabel;
 static int selNdx;                 // current (selected) item
 
 static Pixmap roundMask;
+static Picture uiwinPic;
 
 //
 // allocates GC
@@ -107,20 +108,33 @@ static GC create_gc(int type)
 }
 
 //
+// compute tile position for any layout mode
+//
+static void layoutPos(int idx, int *xp, int *yp)
+{
+    if (g.option_layout != LAYOUT_GRID) {
+        int step = tileW - (tileW > 40 ? tileW * 50 / 100 : tileW / 2);
+        if (step < 1) step = 1;
+        *xp = (int)uiwinW / 2 + (idx - selNdx) * step - (int)tileW / 2;
+        *yp = (int)uiwinH / 2 - (int)tileH / 2;
+    } else if (g.option_vertical) {
+        *xp = (idx / rows) * (tileW + frameW + g.option_spacing) + frameW + g.option_winPad;
+        *yp = (idx % rows) * (tileH + frameW + g.option_spacing) + frameW + g.option_winPad;
+    } else {
+        *xp = (idx % cols) * (tileW + frameW + g.option_spacing) + frameW + g.option_winPad;
+        *yp = (idx / cols) * (tileH + frameW + g.option_spacing) + frameW + g.option_winPad;
+    }
+}
+
+//
 // single use helper for function below
 //
 static void drawFr(GC gc, int f)
 {
-    int x, y, col, row;
-    if (g.option_vertical) {
-        col = f / rows;
-        row = f % rows;
-    } else {
-        col = f % cols;
-        row = f / cols;
-    }
-    x = col * (tileW + frameW + g.option_spacing) + (frameW / 2) + g.option_winPad;
-    y = row * (tileH + frameW + g.option_spacing) + (frameW / 2) + g.option_winPad;
+    int tx, ty;
+    layoutPos(f, &tx, &ty);
+    int x = tx - frameW / 2;
+    int y = ty - frameW / 2;
     int dw = tileW + frameW;
     int dh = tileH + frameW;
     if (g.option_cornerRadius > 0) {
@@ -138,6 +152,11 @@ static void drawFr(GC gc, int f)
 //
 static void framesRedraw(void)
 {
+    if (g.option_layout != LAYOUT_GRID) {
+        // stack: selected frame only (others drawn in renderAllTiles)
+        drawFr(g.gcFrame, selNdx);
+        return;
+    }
     int f;
     for (f = 0; f < g.maxNdx; f++) {
         if (f == selNdx)
@@ -159,21 +178,50 @@ static void framesRedraw(void)
 //
 static int pointedTile(int x, int y)
 {
-    int marg = frameW / 2 + g.option_winPad;
-    if (x < marg || y < marg
-        || (unsigned int)x > uiwinW - marg
-        || (unsigned int)y > uiwinH - marg)
+    if (g.option_layout == LAYOUT_GRID) {
+        int marg = frameW / 2 + g.option_winPad;
+        if (x < marg || y < marg
+            || (unsigned int)x > uiwinW - marg
+            || (unsigned int)y > uiwinH - marg)
+            return -1;
+        int pc = (x - marg) / visualTileW;
+        int pr = (y - marg) / visualTileH;
+        int idx;
+        if (g.option_vertical)
+            idx = pc * rows + pr;
+        else
+            idx = pr * cols + pc;
+        if (idx >= 0 && idx < g.maxNdx)
+            return idx;
         return -1;
-    int pc = (x - marg) / visualTileW;
-    int pr = (y - marg) / visualTileH;
-    int idx;
-    if (g.option_vertical)
-        idx = pc * rows + pr;
-    else
-        idx = pr * cols + pc;
-    if (idx >= 0 && idx < g.maxNdx)
-        return idx;
-    return -1;
+    } else {
+        // Stack: check tiles from closest to farthest
+        int step = (tileW - (tileW > 40 ? tileW * 50 / 100 : tileW / 2));
+        if (step < 1) step = 1;
+        int cx = (int)uiwinW / 2;
+        int cy = (int)uiwinH / 2;
+        for (int d = 0; d < g.maxNdx; d++) {
+            int idx = selNdx + d;
+            if (idx < g.maxNdx) {
+                int tx = cx + (idx - selNdx) * step - (int)tileW / 2;
+                int ty = cy - (int)tileH / 2;
+                if (x >= tx && x < tx + (int)tileW
+                    && y >= ty && y < ty + (int)tileH)
+                    return idx;
+            }
+            if (d > 0) {
+                idx = selNdx - d;
+                if (idx >= 0) {
+                    int tx = cx + (idx - selNdx) * step - (int)tileW / 2;
+                    int ty = cy - (int)tileH / 2;
+                    if (x >= tx && x < tx + (int)tileW
+                        && y >= ty && y < ty + (int)tileH)
+                        return idx;
+                }
+            }
+        }
+        return -1;
+    }
 }
 
 //
@@ -441,17 +489,50 @@ static int placeSingleTile (int j) {
 
     if (! g.winlist[j].tile)
         return -1;
-    int col, row;
-    if (g.option_vertical) {
-        col = j / rows;
-        row = j % rows;
-    } else {
-        col = j % cols;
-        row = j / cols;
+    layoutPos(j, &dest_x, &dest_y);
+
+    // Non-grid non-selected: distance-based scaling via XRender
+    if (g.option_layout != LAYOUT_GRID && j != selNdx && uiwinPic) {
+        int dist = abs(j - selNdx);
+        int sw, sh;
+        float scale = (dist == 1) ? 0.85f
+                     : (dist == 2) ? 0.72f
+                     : 0.60f;
+        sw = (int)(tileW * scale + 0.5f);
+        sh = (int)(tileH * scale + 0.5f);
+        if (sw < 16 || sh < 16) return -1;
+        int ox = dest_x + ((int)tileW - sw) / 2;
+        int oy = dest_y + ((int)tileH - sh) / 2;
+
+        bool old = ee_complain;
+        ee_ignored = NULL;
+        ee_complain = false;
+
+        XRenderPictFormat *srcFmt = XRenderFindStandardFormat(dpy, PictStandardRGB24);
+        Picture srcPic = XRenderCreatePicture(dpy, g.winlist[j].tile, srcFmt, 0, NULL);
+        if (!srcPic) { ee_complain = old; goto fallback_copy; }
+
+        double sx0 = (double)tileW / sw;
+        double sy0 = (double)tileH / sh;
+        XTransform t = {{
+            {XDoubleToFixed(sx0), XDoubleToFixed(0), XDoubleToFixed(0)},
+            {XDoubleToFixed(0), XDoubleToFixed(sy0), XDoubleToFixed(0)},
+            {XDoubleToFixed(0), XDoubleToFixed(0), XDoubleToFixed(1.0)}
+        }};
+        XRenderSetPictureTransform(dpy, srcPic, &t);
+        XRenderSetPictureFilter(dpy, srcPic, FilterBilinear, 0, 0);
+        XRenderComposite(dpy, PictOpOver, srcPic, None, uiwinPic,
+                         0, 0, 0, 0, ox, oy, sw, sh);
+        XRenderFreePicture(dpy, srcPic);
+        XRenderColor dc = {0, 0, 0, (dist == 1) ? 0x3000 : 0x5000};
+        XRenderFillRectangle(dpy, PictOpOver, uiwinPic, &dc, ox, oy, sw, sh);
+        XSync(dpy, False);
+        ee_complain = old;
+        return 1;
     }
-    msg(1, "copying tile %d (col=%d row=%d) to canvas\n", j, col, row);
-    dest_x = col * (tileW + frameW + g.option_spacing) + frameW + g.option_winPad;
-    dest_y = row * (tileH + frameW + g.option_spacing) + frameW + g.option_winPad;
+
+fallback_copy:
+    msg(1, "copying tile %d to canvas at %dx%d\n", j, dest_x, dest_y);
     if (g.option_cornerRadius > 0 && roundMask) {
         XSetClipMask(dpy, g.gcDirect, roundMask);
         XSetClipOrigin(dpy, g.gcDirect, dest_x, dest_y);
@@ -467,6 +548,28 @@ static int placeSingleTile (int j) {
     return r;
 }
 
+//
+// render all tiles in Z-order (back-to-front for stack)
+// draws unselected frames + tiles together per Z-layer
+//
+static void renderAllTiles(void)
+{
+    if (g.option_layout == LAYOUT_GRID) {
+        for (int j = 0; j < g.maxNdx; j++)
+            placeSingleTile(j);
+    } else {
+        int maxD = g.maxNdx - 1;
+        for (int d = maxD; d >= 0; d--) {
+            for (int s = -1; s <= 1; s += 2) {
+                int j = (s == -1) ? selNdx - d : selNdx + d;
+                if (j < 0 || j >= g.maxNdx || j == selNdx) continue;
+                placeSingleTile(j);
+            }
+        }
+        // selected tile last
+        placeSingleTile(selNdx);
+    }
+}
 
 // PUBLIC
 
@@ -663,24 +766,36 @@ int uiShow(bool direction)
         avail_w -= g.option_posX;
         avail_h -= g.option_posY;
     }
-// calculate multi-row/column grid (fixed tile size)
-    if (g.option_vertical) {
-        rows = (avail_h - frameW - 2 * g.option_winPad + g.option_spacing)
-             / (tileH + frameW + g.option_spacing);
-        if (rows < 1) rows = 1;
-        if (rows > g.maxNdx) rows = g.maxNdx;
-        cols = (g.maxNdx + rows - 1) / rows;
+// calculate layout window size
+    if (g.option_layout == LAYOUT_GRID) {
+        if (g.option_vertical) {
+            rows = (avail_h - frameW - 2 * g.option_winPad + g.option_spacing)
+                 / (tileH + frameW + g.option_spacing);
+            if (rows < 1) rows = 1;
+            if (rows > g.maxNdx) rows = g.maxNdx;
+            cols = (g.maxNdx + rows - 1) / rows;
+        } else {
+            cols = (avail_w - frameW - 2 * g.option_winPad + g.option_spacing)
+                 / (tileW + frameW + g.option_spacing);
+            if (cols < 1) cols = 1;
+            if (cols > g.maxNdx) cols = g.maxNdx;
+            rows = (g.maxNdx + cols - 1) / cols;
+        }
+        uiwinW = cols * tileW + (cols + 1) * frameW
+                 + g.option_spacing * (cols - 1) + 2 * g.option_winPad;
+        uiwinH = rows * tileH + (rows + 1) * frameW
+                 + g.option_spacing * (rows - 1) + 2 * g.option_winPad;
     } else {
-        cols = (avail_w - frameW - 2 * g.option_winPad + g.option_spacing)
-             / (tileW + frameW + g.option_spacing);
-        if (cols < 1) cols = 1;
-        if (cols > g.maxNdx) cols = g.maxNdx;
-        rows = (g.maxNdx + cols - 1) / cols;
+        // Stack: fixed-size carousel centered on screen
+        int step = (tileW - (tileW > 40 ? tileW * 50 / 100 : tileW / 2));
+        if (step < 1) step = 1;
+        int nvis = g.maxNdx < 7 ? g.maxNdx : 7;
+        uiwinW = nvis * tileW - (nvis - 1) * (tileW - step)
+                 + 2 * frameW + 2 * g.option_winPad;
+        uiwinH = tileH + 2 * frameW + 2 * g.option_winPad;
+        cols = nvis;
+        rows = 1;
     }
-    uiwinW = cols * tileW + (cols + 1) * frameW
-             + g.option_spacing * (cols - 1) + 2 * g.option_winPad;
-    uiwinH = rows * tileH + (rows + 1) * frameW
-             + g.option_spacing * (rows - 1) + 2 * g.option_winPad;
 // icon may be smaller if it doesn't fit tile
     if (iconW > tileW) {
         rt = (float)tileW / (float)iconW;
@@ -833,6 +948,17 @@ int uiShow(bool direction)
         }
     }
 
+    if (g.option_layout != LAYOUT_GRID) {
+        XRenderPictFormat *visFmt = XRenderFindVisualFormat(dpy, visual);
+        if (visFmt) {
+            uiwinPic = XRenderCreatePicture(dpy, uiwin, visFmt, 0, NULL);
+        } else {
+            uiwinPic = 0;
+        }
+    } else {
+        uiwinPic = 0;
+    }
+
     return 1;
 }
 
@@ -868,12 +994,7 @@ void uiExpose(void)
     }
     if (g.option_cornerRadius > 0)
         XClearWindow(dpy, uiwin);
-// icons
-    int j;
-    for (j = 0; j < g.maxNdx; j++) {
-        placeSingleTile(j);
-    }
-// frame
+    renderAllTiles();
     framesRedraw();
 }
 
@@ -883,6 +1004,12 @@ void uiExpose(void)
 int uiHide(void)
 {
     grabKeysAtUiShow(false);
+    // free XRender Pictures before destroying the window
+    // (destroying a window auto-destroys Pictures on it)
+    if (uiwinPic) {
+        XRenderFreePicture(dpy, uiwinPic);
+        uiwinPic = 0;
+    }
     // order is important: to set focus in Metacity,
     // our window must be destroyed first
     if (uiwin) {
@@ -927,11 +1054,15 @@ int uiHide(void)
 int uiNextWindow(void)
 {
     if (!uiwin)
-        return 0;               // kb events may trigger it even when no window drawn yet
+        return 0;
     selNdx++;
     if (selNdx >= g.maxNdx)
         selNdx = 0;
     msg(0, "item %d\n", selNdx);
+    if (g.option_layout != LAYOUT_GRID) {
+        XClearWindow(dpy, uiwin);
+        renderAllTiles();
+    }
     framesRedraw();
     return 1;
 }
@@ -947,6 +1078,10 @@ int uiPrevWindow(void)
     if (selNdx < 0)
         selNdx = g.maxNdx - 1;
     msg(0, "item %d\n", selNdx);
+    if (g.option_layout != LAYOUT_GRID) {
+        XClearWindow(dpy, uiwin);
+        renderAllTiles();
+    }
     framesRedraw();
     return 1;
 }
@@ -994,6 +1129,10 @@ int uiSelectWindow(int ndx)
     }
     selNdx = ndx;
     msg(0, "item %d\n", selNdx);
+    if (g.option_layout != LAYOUT_GRID) {
+        XClearWindow(dpy, uiwin);
+        renderAllTiles();
+    }
     framesRedraw();
     return 1;
 }
