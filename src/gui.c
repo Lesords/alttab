@@ -54,6 +54,19 @@ static int selNdx;                 // current (selected) item
 static Pixmap roundMask;
 static Picture uiwinPic;
 
+typedef struct {
+    float x, y;
+    float scale;
+    float dim;
+} AnimTileState;
+
+static AnimTileState *animFrom;
+static AnimTileState *animTo;
+static float animProgress;
+static bool animActive;
+static struct timespec animStartTime;
+#define ANIM_DURATION_NS 200000000
+
 //
 // allocates GC
 // type is:
@@ -170,6 +183,35 @@ static void framesRedraw(void)
     }
 // _after_ unselected draw selected, because they may overlap
     drawFr(g.gcFrame, selNdx);
+}
+
+static float easeOutQuad(float t) {
+    return t * (2.0f - t);
+}
+
+static float lerpf(float a, float b, float t) {
+    return a + (b - a) * t;
+}
+
+static void computeTileState(int j, int sel, AnimTileState *s) {
+    int step = tileW - (tileW > 40 ? tileW * 50 / 100 : tileW / 2);
+    if (step < 1) step = 1;
+    s->x = (float)((int)uiwinW / 2 + (j - sel) * step - (int)tileW / 2);
+    s->y = (float)((int)uiwinH / 2 - (int)tileH / 2);
+    int dist = (j == sel) ? 0 : abs(j - sel);
+    if (dist == 0) {
+        s->scale = 1.0f;
+        s->dim = 0.0f;
+    } else if (dist == 1) {
+        s->scale = 0.85f;
+        s->dim = 0.1875f;
+    } else if (dist == 2) {
+        s->scale = 0.72f;
+        s->dim = 0.3125f;
+    } else {
+        s->scale = 0.60f;
+        s->dim = 0.3125f;
+    }
 }
 
 //
@@ -571,6 +613,119 @@ static void renderAllTiles(void)
     }
 }
 
+//
+// render single tile with explicit animation state (x, y, scale, dim)
+//
+static int placeSingleTileAnim(int j, float dest_x, float dest_y,
+                                float scale, float dim)
+{
+    if (!g.winlist[j].tile)
+        return -1;
+
+    if (g.option_layout != LAYOUT_GRID && uiwinPic) {
+        int sw = (int)(tileW * scale + 0.5f);
+        int sh = (int)(tileH * scale + 0.5f);
+        if (sw < 16 || sh < 16) return -1;
+        int ox = (int)dest_x + ((int)tileW - sw) / 2;
+        int oy = (int)dest_y + ((int)tileH - sh) / 2;
+
+        bool old = ee_complain;
+        ee_complain = false;
+        ee_ignored = NULL;
+
+        XRenderPictFormat *srcFmt = XRenderFindStandardFormat(dpy, PictStandardRGB24);
+        Picture srcPic = XRenderCreatePicture(dpy, g.winlist[j].tile, srcFmt, 0, NULL);
+        if (!srcPic) { ee_complain = old; goto fallback_copy_anim; }
+
+        double sx0 = (double)tileW / sw;
+        double sy0 = (double)tileH / sh;
+        XTransform t = {{
+            {XDoubleToFixed(sx0), XDoubleToFixed(0), XDoubleToFixed(0)},
+            {XDoubleToFixed(0), XDoubleToFixed(sy0), XDoubleToFixed(0)},
+            {XDoubleToFixed(0), XDoubleToFixed(0), XDoubleToFixed(1.0)}
+        }};
+        XRenderSetPictureTransform(dpy, srcPic, &t);
+        XRenderSetPictureFilter(dpy, srcPic, FilterBilinear, 0, 0);
+        XRenderComposite(dpy, PictOpOver, srcPic, None, uiwinPic,
+                         0, 0, 0, 0, ox, oy, sw, sh);
+        XRenderFreePicture(dpy, srcPic);
+
+        if (dim > 0.0f) {
+            unsigned short alpha = (unsigned short)(dim * 0x10000);
+            XRenderColor dc = {0, 0, 0, alpha};
+            XRenderFillRectangle(dpy, PictOpOver, uiwinPic, &dc, ox, oy, sw, sh);
+        }
+
+        XSync(dpy, False);
+        ee_complain = old;
+        return 1;
+    }
+
+fallback_copy_anim:
+    msg(1, "copying tile %d to canvas at %.0fx%.0f\n", j, dest_x, dest_y);
+    if (g.option_cornerRadius > 0 && roundMask) {
+        XSetClipMask(dpy, g.gcDirect, roundMask);
+        XSetClipOrigin(dpy, g.gcDirect, (int)dest_x, (int)dest_y);
+        int r = XCopyArea(dpy, g.winlist[j].tile, uiwin,
+                g.gcDirect, 0, 0, tileW, tileH, (int)dest_x, (int)dest_y);
+        XSetClipMask(dpy, g.gcDirect, None);
+        return r;
+    }
+    int r = XCopyArea(dpy, g.winlist[j].tile, uiwin,
+            g.gcDirect, 0, 0, tileW, tileH, (int)dest_x, (int)dest_y);
+    return r;
+}
+
+//
+// render all tiles with interpolated animation state
+//
+static void renderAllTilesAnim(float t)
+{
+    int maxD = g.maxNdx - 1;
+    for (int d = maxD; d >= 0; d--) {
+        for (int s = -1; s <= 1; s += 2) {
+            int j = (s == -1) ? selNdx - d : selNdx + d;
+            if (j < 0 || j >= g.maxNdx || j == selNdx) continue;
+
+            float x = lerpf(animFrom[j].x, animTo[j].x, t);
+            float y = lerpf(animFrom[j].y, animTo[j].y, t);
+            float scale = lerpf(animFrom[j].scale, animTo[j].scale, t);
+            float dim = lerpf(animFrom[j].dim, animTo[j].dim, t);
+            placeSingleTileAnim(j, x, y, scale, dim);
+        }
+    }
+    // selected tile last (on top)
+    int j = selNdx;
+    float x = lerpf(animFrom[j].x, animTo[j].x, t);
+    float y = lerpf(animFrom[j].y, animTo[j].y, t);
+    float scale = lerpf(animFrom[j].scale, animTo[j].scale, t);
+    float dim = lerpf(animFrom[j].dim, animTo[j].dim, t);
+    placeSingleTileAnim(j, x, y, scale, dim);
+}
+
+//
+// draw frame at selected tile's interpolated position
+//
+static void framesRedrawAnim(float t)
+{
+    if (g.option_layout != LAYOUT_GRID) {
+        float fx = lerpf(animFrom[selNdx].x, animTo[selNdx].x, t);
+        float fy = lerpf(animFrom[selNdx].y, animTo[selNdx].y, t);
+        int x = (int)fx - frameW / 2;
+        int y = (int)fy - frameW / 2;
+        int dw = tileW + frameW;
+        int dh = tileH + frameW;
+        if (g.option_cornerRadius > 0) {
+            drawRoundedRectFrame(dpy, uiwin, g.gcFrame, x, y, dw, dh,
+                                 g.option_cornerRadius);
+        } else {
+            XDrawRectangle(dpy, uiwin, g.gcFrame, x, y, dw, dh);
+        }
+        return;
+    }
+    framesRedraw();
+}
+
 // PUBLIC
 
 //
@@ -962,6 +1117,9 @@ int uiShow(bool direction)
     return 1;
 }
 
+// forward declarations for animation functions
+static float advanceAnimation(void);
+
 //
 // Expose event callback
 // redraw our window
@@ -994,8 +1152,118 @@ void uiExpose(void)
     }
     if (g.option_cornerRadius > 0)
         XClearWindow(dpy, uiwin);
-    renderAllTiles();
-    framesRedraw();
+    float t = advanceAnimation();
+    if (t >= 0.0f) {
+        renderAllTilesAnim(t);
+        framesRedrawAnim(t);
+    } else {
+        renderAllTiles();
+        framesRedraw();
+    }
+}
+
+//
+// advance animation timer, return eased t (0..1) if animating,
+// -1 if animation just ended (caller should render final),
+// -2 if no animation active
+//
+static float advanceAnimation(void)
+{
+    if (!animActive) return -2.0f;
+
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    long elapsed_ns = (now.tv_sec - animStartTime.tv_sec) * 1000000000L
+                    + (now.tv_nsec - animStartTime.tv_nsec);
+    float p = (float)elapsed_ns / ANIM_DURATION_NS;
+    if (p >= 1.0f) {
+        animProgress = 1.0f;
+        animActive = false;
+        return -1.0f;
+    }
+    animProgress = p;
+    return easeOutQuad(p);
+}
+
+//
+// start or restart animation toward newSel
+//
+static void startAnimation(int newSel)
+{
+    if (!uiwin || g.option_layout == LAYOUT_GRID || newSel == selNdx)
+        return;
+
+    if (animFrom) free(animFrom);
+    if (animTo) free(animTo);
+    animFrom = malloc(g.maxNdx * sizeof(AnimTileState));
+    animTo = malloc(g.maxNdx * sizeof(AnimTileState));
+    if (!animFrom || !animTo) {
+        if (animFrom) { free(animFrom); animFrom = NULL; }
+        if (animTo) { free(animTo); animTo = NULL; }
+        animActive = false;
+        selNdx = newSel;
+        XClearWindow(dpy, uiwin);
+        renderAllTiles();
+        framesRedraw();
+        return;
+    }
+
+    if (animActive) {
+        // snap current interpolated state as new from-state
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        long elapsed_ns = (now.tv_sec - animStartTime.tv_sec) * 1000000000L
+                        + (now.tv_nsec - animStartTime.tv_nsec);
+        float p = (float)elapsed_ns / ANIM_DURATION_NS;
+        if (p < 0) p = 0;
+        if (p > 1) p = 1;
+        float t = easeOutQuad(p);
+        for (int j = 0; j < g.maxNdx; j++) {
+            animFrom[j].x = lerpf(animFrom[j].x, animTo[j].x, t);
+            animFrom[j].y = lerpf(animFrom[j].y, animTo[j].y, t);
+            animFrom[j].scale = lerpf(animFrom[j].scale, animTo[j].scale, t);
+            animFrom[j].dim = lerpf(animFrom[j].dim, animTo[j].dim, t);
+        }
+    } else {
+        for (int j = 0; j < g.maxNdx; j++)
+            computeTileState(j, selNdx, &animFrom[j]);
+    }
+
+    selNdx = newSel;
+    for (int j = 0; j < g.maxNdx; j++)
+        computeTileState(j, selNdx, &animTo[j]);
+
+    animActive = true;
+    animProgress = 0.0f;
+    clock_gettime(CLOCK_MONOTONIC, &animStartTime);
+
+    // render first frame
+    float first_t = easeOutQuad(0.0f);
+    XClearWindow(dpy, uiwin);
+    renderAllTilesAnim(first_t);
+    framesRedrawAnim(first_t);
+    XFlush(dpy);
+}
+
+//
+// render animation frame if animation is active
+// called from event loop
+//
+void uiAnimRender(void)
+{
+    float t = advanceAnimation();
+    if (t >= 0.0f) {
+        XClearWindow(dpy, uiwin);
+        renderAllTilesAnim(t);
+        framesRedrawAnim(t);
+        XFlush(dpy);
+    } else if (t == -1.0f) {
+        // animation just ended, render final state
+        XClearWindow(dpy, uiwin);
+        renderAllTiles();
+        framesRedraw();
+        XFlush(dpy);
+    }
 }
 
 //
@@ -1003,6 +1271,9 @@ void uiExpose(void)
 //
 int uiHide(void)
 {
+    animActive = false;
+    if (animFrom) { free(animFrom); animFrom = NULL; }
+    if (animTo) { free(animTo); animTo = NULL; }
     grabKeysAtUiShow(false);
     // free XRender Pictures before destroying the window
     // (destroying a window auto-destroys Pictures on it)
@@ -1055,15 +1326,16 @@ int uiNextWindow(void)
 {
     if (!uiwin)
         return 0;
-    selNdx++;
-    if (selNdx >= g.maxNdx)
-        selNdx = 0;
-    msg(0, "item %d\n", selNdx);
+    int newSel = selNdx + 1;
+    if (newSel >= g.maxNdx)
+        newSel = 0;
+    msg(0, "item %d\n", newSel);
     if (g.option_layout != LAYOUT_GRID) {
-        XClearWindow(dpy, uiwin);
-        renderAllTiles();
+        startAnimation(newSel);
+    } else {
+        selNdx = newSel;
+        framesRedraw();
     }
-    framesRedraw();
     return 1;
 }
 
@@ -1074,15 +1346,16 @@ int uiPrevWindow(void)
 {
     if (!uiwin)
         return 0;
-    selNdx--;
-    if (selNdx < 0)
-        selNdx = g.maxNdx - 1;
-    msg(0, "item %d\n", selNdx);
+    int newSel = selNdx - 1;
+    if (newSel < 0)
+        newSel = g.maxNdx - 1;
+    msg(0, "item %d\n", newSel);
     if (g.option_layout != LAYOUT_GRID) {
-        XClearWindow(dpy, uiwin);
-        renderAllTiles();
+        startAnimation(newSel);
+    } else {
+        selNdx = newSel;
+        framesRedraw();
     }
-    framesRedraw();
     return 1;
 }
 
@@ -1127,13 +1400,13 @@ int uiSelectWindow(int ndx)
     if (ndx < 0 || ndx >= g.maxNdx) {
         return 0;
     }
-    selNdx = ndx;
-    msg(0, "item %d\n", selNdx);
+    msg(0, "item %d\n", ndx);
     if (g.option_layout != LAYOUT_GRID) {
-        XClearWindow(dpy, uiwin);
-        renderAllTiles();
+        startAnimation(ndx);
+    } else {
+        selNdx = ndx;
+        framesRedraw();
     }
-    framesRedraw();
     return 1;
 }
 

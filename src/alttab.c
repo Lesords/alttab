@@ -732,6 +732,7 @@ int main(int argc, char **argv)
                 uiHide();
                 continue;
             }
+            uiAnimRender();
             if (!XCheckIfEvent(dpy, &ev, *predproc_true, NULL)) {
                 nanosleep(&nanots, NULL);
                 continue;

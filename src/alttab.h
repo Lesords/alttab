@@ -240,6 +240,7 @@ void uiExpose(void);
 int uiHide(void);
 int uiNextWindow(void);
 int uiPrevWindow(void);
+void uiAnimRender(void);
 int uiKillWindow(void);
 int uiSelectWindow(int ndx);
 void uiButtonEvent(XButtonEvent e);
