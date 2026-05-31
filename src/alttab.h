@@ -32,17 +32,17 @@ along with alttab.  If not, see <http://www.gnu.org/licenses/>.
 #define XCLASSNAME  XWINNAME
 #define MSGPREFIX   "alttab: "
 #define XCLASS      "AltTab"
-#define DEFTILEW    112
-#define DEFTILEH    128
-#define DEFICONW    32
-#define DEFICONH    32
+#define DEFTILEW    128
+#define DEFTILEH    150
+#define DEFICONW    127
+#define DEFICONH    64
 #define DEFBORDERW  0
-#define DEFSPACING  0
+#define DEFSPACING  8
 #define DEFTHEME    "hicolor"
-#define DEFFRAMEW   8
-#define DEFCORNER_RADIUS 0
+#define DEFFRAMEW   3
+#define DEFCORNER_RADIUS 6
 //#define DEFFONT   "xft:DejaVu Sans Condensed-10"
-#define DEFFONT     "xft:sans-10"
+#define DEFFONT     "xft:Noto Sans CJK SC"
 
 #define COLBG       0
 #define COLFG       1
@@ -51,10 +51,11 @@ along with alttab.  If not, see <http://www.gnu.org/licenses/>.
 #define COLINACT    4
 #define COLMIN      5
 #define NCOLORS     6
-#define DEFCOLBG    "black"
-#define DEFCOLFG    "grey"
-#define DEFCOLFRAME "#a0abab"
+#define DEFCOLBG    "#273746"
+#define DEFCOLFG    "#ffffff"
+#define DEFCOLFRAME "#00bfff"
 #define DEFCOLBORDER "black"
+#define DEFCOLINACT "#46475a"
 
 #define XDEPTH      24          // TODO: get rid of this
 
