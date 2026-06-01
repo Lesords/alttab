@@ -501,12 +501,16 @@ static int grabKeysAtUiShow(bool grabUngrab)
 {
     char *grabhint =
         "Error while (un)grabbing key 0x%x with mask 0x%x/0x%x.\n";
-#define nkeys 4
+#define nkeys 8
     KeyCode key[nkeys] = {
         g.option_prevCode,
         g.option_nextCode,
         g.option_cancelCode,
-        g.option_killCode
+        g.option_killCode,
+        g.option_upCode,
+        g.option_downCode,
+        g.option_leftCode,
+        g.option_rightCode
     };
     int k;
 
@@ -1358,6 +1362,37 @@ int uiPrevWindow(void)
     }
     return 1;
 }
+
+//
+// directional navigation: move selection up in the grid
+//
+static int uiMoveFocus(int dc, int dr)
+{
+    if (!uiwin || g.option_layout != LAYOUT_GRID)
+        return 0;
+    int col, row;
+    if (g.option_vertical) {
+        row = selNdx % rows;
+        col = selNdx / rows;
+    } else {
+        col = selNdx % cols;
+        row = selNdx / cols;
+    }
+    if (dc) col = (col + dc + cols) % cols;
+    if (dr) row = (row + dr + rows) % rows;
+    int newSel = g.option_vertical ? col * rows + row : row * cols + col;
+    if (newSel >= g.maxNdx)
+        newSel = g.maxNdx - 1;
+    msg(0, "item %d\n", newSel);
+    selNdx = newSel;
+    framesRedraw();
+    return 1;
+}
+
+int uiUpWindow(void)    { return uiMoveFocus(0, -1); }
+int uiDownWindow(void)  { return uiMoveFocus(0,  1); }
+int uiLeftWindow(void)  { return uiMoveFocus(-1, 0); }
+int uiRightWindow(void) { return uiMoveFocus( 1, 0); }
 
 //
 // kill X client of current window

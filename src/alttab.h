@@ -66,7 +66,11 @@ along with alttab.  If not, see <http://www.gnu.org/licenses/>.
 #define DEFPREVKEYKS    XK_VoidSymbol
 #define DEFNEXTKEYKS    XK_VoidSymbol
 #define DEFCANCELKS XK_Escape
-#define DEFKILLKS   XK_k
+#define DEFKILLKS   XK_VoidSymbol
+#define DEFUPKEYKS      XK_k
+#define DEFDOWNKEYKS    XK_j
+#define DEFLEFTKEYKS    XK_h
+#define DEFRIGHTKEYKS   XK_l
 
 #include "icon.h"
 
@@ -201,6 +205,7 @@ typedef struct {
     KeyCode option_modCode, option_keyCode;
     KeyCode option_prevCode, option_nextCode;
     KeyCode option_cancelCode, option_killCode;
+    KeyCode option_upCode, option_downCode, option_leftCode, option_rightCode;
 #define BL_MIN          0
 #define BL_NONE         0
 #define BL_DESKTOP      1
@@ -241,6 +246,10 @@ void uiExpose(void);
 int uiHide(void);
 int uiNextWindow(void);
 int uiPrevWindow(void);
+int uiUpWindow(void);
+int uiDownWindow(void);
+int uiLeftWindow(void);
+int uiRightWindow(void);
 void uiAnimRender(void);
 int uiKillWindow(void);
 int uiSelectWindow(int ndx);

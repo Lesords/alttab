@@ -59,6 +59,10 @@ Options:\n\
    -nk str    keysym of 'next' key\n\
    -ck str    keysym of 'cancel' key\n\
    -dk str    keysym of 'kill' key\n\
+   -upk str   keysym of 'up' key\n\
+   -dnk str   keysym of 'down' key\n\
+   -lk str    keysym of 'left' key\n\
+   -rk str    keysym of 'right' key\n\
    -mm N      (obsoleted) main modifier mask\n\
    -bm N      (obsoleted) backward scroll modifier mask\n\
     -t NxM    tile geometry\n\
@@ -129,6 +133,10 @@ static int use_args_and_xrm(int *argc, char **argv)
         {"-nk", "*nextkey.keysym", XrmoptionSepArg, NULL},
         {"-ck", "*cancelkey.keysym", XrmoptionSepArg, NULL},
         {"-dk", "*killkey.keysym", XrmoptionSepArg, NULL},
+        {"-upk", "*upkey.keysym", XrmoptionSepArg, NULL},
+        {"-dnk", "*downkey.keysym", XrmoptionSepArg, NULL},
+        {"-lk", "*leftkey.keysym", XrmoptionSepArg, NULL},
+        {"-rk", "*rightkey.keysym", XrmoptionSepArg, NULL},
         {"-t", "*tile.geometry", XrmoptionSepArg, NULL},
         {"-i", "*icon.geometry", XrmoptionSepArg, NULL},
         {"-vp", "*viewport", XrmoptionSepArg, NULL},
@@ -311,6 +319,31 @@ static int use_args_and_xrm(int *argc, char **argv)
     if (ksi == -1)
         die("%s\n", errmsg);
     killC = ksi != 0 ? ksi : XKeysymToKeycode(dpy, DEFKILLKS);
+
+#define upC  g.option_upCode
+#define downC  g.option_downCode
+#define leftC  g.option_leftCode
+#define rightC  g.option_rightCode
+
+    ksi = ksym_option_to_keycode(&db, XRMAPPNAME, "upkey", &errmsg);
+    if (ksi == -1)
+        die("%s\n", errmsg);
+    upC = ksi != 0 ? ksi : XKeysymToKeycode(dpy, DEFUPKEYKS);
+
+    ksi = ksym_option_to_keycode(&db, XRMAPPNAME, "downkey", &errmsg);
+    if (ksi == -1)
+        die("%s\n", errmsg);
+    downC = ksi != 0 ? ksi : XKeysymToKeycode(dpy, DEFDOWNKEYKS);
+
+    ksi = ksym_option_to_keycode(&db, XRMAPPNAME, "leftkey", &errmsg);
+    if (ksi == -1)
+        die("%s\n", errmsg);
+    leftC = ksi != 0 ? ksi : XKeysymToKeycode(dpy, DEFLEFTKEYKS);
+
+    ksi = ksym_option_to_keycode(&db, XRMAPPNAME, "rightkey", &errmsg);
+    if (ksi == -1)
+        die("%s\n", errmsg);
+    rightC = ksi != 0 ? ksi : XKeysymToKeycode(dpy, DEFRIGHTKEYKS);
 
     switch (xresource_load_int(&db, XRMAPPNAME, "modifier.mask", &(GMM))) {
     case 1:
@@ -680,6 +713,18 @@ static int isPrevNextKey(unsigned int keycode)
     return 0;
 }
 
+//
+// Returns 0 if not an arrow keycode, or 1/2/3/4 for up/down/left/right.
+//
+static int isArrowKey(unsigned int keycode)
+{
+    if (keycode == g.option_upCode) return 1;
+    if (keycode == g.option_downCode) return 2;
+    if (keycode == g.option_leftCode) return 3;
+    if (keycode == g.option_rightCode) return 4;
+    return 0;
+}
+
 // see #97
 #define CHECK_97 \
     XQueryKeymap(dpy, keys_pressed); \
@@ -762,10 +807,17 @@ int main(int argc, char **argv)
                     CHECK_97;
                     uiSelectWindow(0);
                     uiHide();
+                } else if (isArrowKey(ev.xkey.keycode)) { // vim arrow keys
+                    switch (isArrowKey(ev.xkey.keycode)) {
+                    case 1: uiUpWindow(); break;
+                    case 2: uiDownWindow(); break;
+                    case 3: uiLeftWindow(); break;
+                    case 4: uiRightWindow(); break;
+                    }
                 } else if (ev.xkey.keycode == g.option_killCode) { // k
                     CHECK_97;
                     uiKillWindow();
-                } else {  // non-tab
+                } else {  // non-tab, non-arrow
                     switch (isPrevNextKey(ev.xkey.keycode)) {
                     case 1:
                         uiPrevWindow();
