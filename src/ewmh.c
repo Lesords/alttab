@@ -87,7 +87,7 @@ static int ewmh_send_wm_evt(Window w, char *atom, unsigned long edata[])
     return 1;
 }
 
-static int ewmh_switch_desktop(unsigned long desktop)
+int ewmh_switch_desktop(unsigned long desktop)
 {
     int evr, elapsed;
     unsigned long edata[] = { desktop, CurrentTime, 0, 0, 0 };
@@ -206,6 +206,8 @@ int ewmh_initWinlist(void)
     unsigned long current_desktop, window_desktop;
 
     current_desktop = ewmh_getCurrentDesktop();
+    if (g.viewDesktop != DESKTOP_UNKNOWN)
+        current_desktop = g.viewDesktop;
 
     aw = ewmh_getActiveWindow();
     if (!aw) {
@@ -262,7 +264,7 @@ int ewmh_setFocus(int winNdx, Window fwin)
 {
     Window win = (fwin != 0) ? fwin : g.winlist[winNdx].id;
     msg(1, "ewmh_setFocus win 0x%lx\n", win);
-    if (fwin == 0 && g.option_desktop != DESK_CURRENT) {
+    if (fwin == 0 && (g.option_desktop != DESK_CURRENT || g.viewDesktop != DESKTOP_UNKNOWN)) {
         unsigned long wdesk = g.winlist[winNdx].desktop;
         unsigned long cdesk = ewmh_getCurrentDesktop();
         msg(1, "ewmh_setFocus fwin 0x%lx opt %d wdesk %lu cdesk %lu\n",
@@ -306,6 +308,28 @@ unsigned long ewmh_getCurrentDesktop(void)
 unsigned long ewmh_getDesktopOfWindow(Window w)
 {
     return ewmh_getDesktopFromProp(w, "_NET_WM_DESKTOP", "_WIN_WORKSPACE");
+}
+
+unsigned long ewmh_getNumberOfDesktops(void)
+{
+    return ewmh_getDesktopFromProp(root, "_NET_NUMBER_OF_DESKTOPS", "_NET_NUMBER_OF_DESKTOPS");
+}
+
+//
+// read _NET_DESKTOP_VIEWPORT: array of (x, y) pairs, one per desktop
+// returns malloc'd long array (2 longs per desktop), sets *count
+// caller must free the returned pointer
+//
+long *ewmh_getViewports(int *count)
+{
+    unsigned long size;
+    long *data = (long *)get_x_property(root, XA_CARDINAL, "_NET_DESKTOP_VIEWPORT", &size);
+    if (!data) {
+        *count = 0;
+        return NULL;
+    }
+    *count = size / (2 * sizeof(long));
+    return data;
 }
 
 //

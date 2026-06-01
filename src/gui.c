@@ -321,8 +321,9 @@ static void prepareTile(WindowInfo * wi)
             }
         }
 
-        if (srcW > 0 && srcH > 0)
+        if (srcW > 0 && srcH > 0) {
             pixmapFit(src, None, wi->tile, srcW, srcH, tileW, tileH);
+        }
 
         if (named != None) {
             XSync(dpy, False);
@@ -334,7 +335,7 @@ static void prepareTile(WindowInfo * wi)
             ee_complain = true;
         }
 
-        // Top info strip
+        // Top info strip (drawn regardless of preview success)
         if (wi->name[0] && fontLabel) {
             XGlyphInfo te;
             XftTextExtentsUtf8(dpy, fontLabel,
@@ -377,6 +378,7 @@ static void prepareTile(WindowInfo * wi)
             }
         }
 
+        // Skip icon if we got a preview, or if preview was attempted but failed
         goto endTile;
     }
 
@@ -501,7 +503,7 @@ static int grabKeysAtUiShow(bool grabUngrab)
 {
     char *grabhint =
         "Error while (un)grabbing key 0x%x with mask 0x%x/0x%x.\n";
-#define nkeys 8
+#define nkeys 10
     KeyCode key[nkeys] = {
         g.option_prevCode,
         g.option_nextCode,
@@ -510,7 +512,9 @@ static int grabKeysAtUiShow(bool grabUngrab)
         g.option_upCode,
         g.option_downCode,
         g.option_leftCode,
-        g.option_rightCode
+        g.option_rightCode,
+        g.option_prevWsCode,
+        g.option_nextWsCode
     };
     int k;
 
@@ -806,10 +810,103 @@ int startupGUItasks(void)
 }
 
 //
+// calculate grid/carousel layout from available space
+//
+static void calcLayout(int avail_w, int avail_h)
+{
+    if (g.option_layout == LAYOUT_GRID) {
+        if (g.option_vertical) {
+            rows = (avail_h - frameW - 2 * g.option_winPad + g.option_spacing)
+                 / (tileH + frameW + g.option_spacing);
+            if (rows < 1) rows = 1;
+            if (rows > g.maxNdx) rows = g.maxNdx;
+            cols = (g.maxNdx + rows - 1) / rows;
+        } else {
+            cols = (avail_w - frameW - 2 * g.option_winPad + g.option_spacing)
+                 / (tileW + frameW + g.option_spacing);
+            if (cols < 1) cols = 1;
+            if (cols > g.maxNdx) cols = g.maxNdx;
+            rows = (g.maxNdx + cols - 1) / cols;
+        }
+        uiwinW = cols * tileW + (cols + 1) * frameW
+                 + g.option_spacing * (cols - 1) + 2 * g.option_winPad;
+        uiwinH = rows * tileH + (rows + 1) * frameW
+                 + g.option_spacing * (rows - 1) + 2 * g.option_winPad;
+    } else {
+        int step = (tileW - (tileW > 40 ? tileW * 50 / 100 : tileW / 2));
+        if (step < 1) step = 1;
+        int nvis = g.maxNdx < 7 ? g.maxNdx : 7;
+        uiwinW = nvis * tileW - (nvis - 1) * (tileW - step)
+                 + 2 * frameW + 2 * g.option_winPad;
+        uiwinH = tileH + 2 * frameW + 2 * g.option_winPad;
+        cols = nvis;
+        rows = 1;
+    }
+    if (g.option_positioning == POS_CENTER) {
+        uiwinX = (g.vp.w - uiwinW) / 2 + g.vp.x;
+        uiwinY = (g.vp.h - uiwinH) / 2 + g.vp.y;
+    } else {
+        uiwinX = g.option_posX + g.vp.x;
+        uiwinY = g.option_posY + g.vp.y;
+    }
+    visualTileW = tileW + frameW + g.option_spacing;
+    visualTileH = tileH + frameW + g.option_spacing;
+}
+
+static void setSizeHints(void)
+{
+    long sflags = USPosition | USSize | PPosition | PSize | PMinSize | PMaxSize | PBaseSize;
+    if (g.option_positioning != POS_NONE)
+        sflags |= PWinGravity;
+    int max_w = g.vp.w > 0 ? g.vp.w : 8192;
+    int max_h = g.vp.h > 0 ? g.vp.h : 8192;
+    int gravity = (g.option_positioning == POS_CENTER && g.option_vp_mode != VP_SPECIFIC)
+        ? CenterGravity : StaticGravity;
+    XSizeHints hints = {
+        .flags = sflags,
+        .x = uiwinX, .y = uiwinY,
+        .width = uiwinW, .height = uiwinH,
+        .min_width = uiwinW, .min_height = uiwinH,
+        .max_width = max_w, .max_height = max_h,
+        .width_inc = 0, .height_inc = 0,
+        .min_aspect = {0, 0}, .max_aspect = {0, 0},
+        .base_width = uiwinW, .base_height = uiwinH,
+        .win_gravity = gravity,
+    };
+    XSetWMNormalHints(dpy, uiwin, &hints);
+}
+
+static void applyWindowShapeMask(void)
+{
+    if (g.option_cornerRadius <= 0) return;
+    int ev, err;
+    if (!XShapeQueryExtension(dpy, &ev, &err)) return;
+    Pixmap winMask = createRoundedRectMask(uiwinW, uiwinH, g.option_cornerRadius);
+    if (!winMask) return;
+    XShapeCombineMask(dpy, uiwin, ShapeBounding, 0, 0, winMask, ShapeSet);
+    XFreePixmap(dpy, winMask);
+}
+
+static int initAndLayout(void)
+{
+    if (!initWinlist())
+        return 0;
+    if (!g.winlist || g.maxNdx < 1)
+        return 0;
+    int avail_w = g.vp.w - (g.option_positioning == POS_SPECIFIC ? g.option_posX : 0);
+    int avail_h = g.vp.h - (g.option_positioning == POS_SPECIFIC ? g.option_posY : 0);
+    calcLayout(avail_w, avail_h);
+    for (int m = 0; m < g.maxNdx; m++)
+        prepareTile(&(g.winlist[m]));
+    return 1;
+}
+
+//
 // called on alt-tab keypress to draw popup
 // build g.winlist
 // create our window
 // sets g.uiShowHasRun (if set, then call uiHide to free X stuff)
+//
 // returns 1 if our window is ready to Expose, 0 otherwise
 // direction is direction of first press: with shift or without
 //
@@ -817,6 +914,7 @@ int uiShow(bool direction)
 {
     msg(0, "preparing ui\n");
     g.uiShowHasRun = true;      // begin allocations
+    g.viewDesktop = DESKTOP_UNKNOWN;  // start with real current desktop
 // screen-related stuff is not at startup but here,
 // because screen configuration may get changed at runtime
 // moreover, DisplayWidth/Height aren't changed without
@@ -868,46 +966,6 @@ int uiShow(bool direction)
 
     XClassHint class_h = { XCLASSNAME, XCLASS };
 
-// to init winlist, the following must be initialized:
-// GC,
-// g.vp (for SCR_CURRENT)
-
-    if (!initWinlist()) {
-        msg(0, "initWinlist failed, skipping ui initialization\n");
-        return 0;
-    }
-
-    if (!g.winlist) {
-        msg(0, "winlist doesn't exist, skipping ui initialization\n");
-        return 0;
-    }
-    if (g.maxNdx < 1) {
-        msg(0, "number of windows < 1, skipping ui initialization\n");
-        return 0;
-    }
-
-    int backNdx = g.maxNdx - 1;
-    int forwNdx = (0 >= (g.maxNdx - 1) || g.option_desktop == DESK_NOCURRENT) ? 0 : 1;
-    selNdx = direction ? backNdx : forwNdx;
-//if (selNdx<0 || selNdx>=g.maxNdx) { selNdx=0; } // just for case
-    msg(1, "Current (selected) item in winlist: %d\n", selNdx);
-
-    if (g.debug > 0) {
-        msg(0, "got %d windows\n", g.maxNdx);
-        int i;
-        for (i = 0; i < g.maxNdx; i++) {
-            msg(0,
-                "%d: %lx (lvl %d, icon %lu (%dx%d)): %s\n", i,
-                g.winlist[i].id, g.winlist[i].reclevel,
-                g.winlist[i].icon_drawable, g.winlist[i].icon_w,
-                g.winlist[i].icon_h, g.winlist[i].name);
-#ifdef ICON_DEBUG
-            msg(0, "   %s\n", g.winlist[i].icon_src);
-#endif
-        }
-    }
-// have winlist, now back to uiwin stuff
-// calculate dimensions
     tileW = g.option_tileW;
     tileH = g.option_tileH;
     if (g.option_iconSrc != ISRC_NONE) {
@@ -916,96 +974,56 @@ int uiShow(bool direction)
     } else {
         iconW = iconH = 0;
     }
-    float rt = 1.0;
-// for subsequent calculation of width(s), use 'avail_w'/'avail_h'
-// instead of g.vp.w, because they don't match for POS_SPECIFIC
-    int avail_w = g.vp.w;
-    int avail_h = g.vp.h;
-    if (g.option_positioning == POS_SPECIFIC) {
-        avail_w -= g.option_posX;
-        avail_h -= g.option_posY;
-    }
-// calculate layout window size
-    if (g.option_layout == LAYOUT_GRID) {
-        if (g.option_vertical) {
-            rows = (avail_h - frameW - 2 * g.option_winPad + g.option_spacing)
-                 / (tileH + frameW + g.option_spacing);
-            if (rows < 1) rows = 1;
-            if (rows > g.maxNdx) rows = g.maxNdx;
-            cols = (g.maxNdx + rows - 1) / rows;
-        } else {
-            cols = (avail_w - frameW - 2 * g.option_winPad + g.option_spacing)
-                 / (tileW + frameW + g.option_spacing);
-            if (cols < 1) cols = 1;
-            if (cols > g.maxNdx) cols = g.maxNdx;
-            rows = (g.maxNdx + cols - 1) / cols;
-        }
-        uiwinW = cols * tileW + (cols + 1) * frameW
-                 + g.option_spacing * (cols - 1) + 2 * g.option_winPad;
-        uiwinH = rows * tileH + (rows + 1) * frameW
-                 + g.option_spacing * (rows - 1) + 2 * g.option_winPad;
-    } else {
-        // Stack: fixed-size carousel centered on screen
-        int step = (tileW - (tileW > 40 ? tileW * 50 / 100 : tileW / 2));
-        if (step < 1) step = 1;
-        int nvis = g.maxNdx < 7 ? g.maxNdx : 7;
-        uiwinW = nvis * tileW - (nvis - 1) * (tileW - step)
-                 + 2 * frameW + 2 * g.option_winPad;
-        uiwinH = tileH + 2 * frameW + 2 * g.option_winPad;
-        cols = nvis;
-        rows = 1;
-    }
-// icon may be smaller if it doesn't fit tile
-    if (iconW > tileW) {
-        rt = (float)tileW / (float)iconW;
-        iconW = tileW;
-        iconH = rt * iconH;
-    }
-    if (iconH > tileH) {
-        rt = (float)tileH / (float)iconH;
-        iconH = tileH;
-        iconW = rt * iconW;
+
+    if (!initAndLayout()) {
+        msg(0, "initWinlist or layout failed, skipping ui initialization\n");
+        return 0;
     }
 
-    if (g.option_positioning == POS_CENTER) {
-        uiwinX = (g.vp.w - uiwinW) / 2 + g.vp.x;
-        uiwinY = (g.vp.h - uiwinH) / 2 + g.vp.y;
-    } else {
-        uiwinX = g.option_posX + g.vp.x;
-        uiwinY = g.option_posY + g.vp.y;
+    int backNdx = g.maxNdx - 1;
+    int forwNdx = (0 >= (g.maxNdx - 1) || g.option_desktop == DESK_NOCURRENT) ? 0 : 1;
+    selNdx = direction ? backNdx : forwNdx;
+    msg(1, "Current (selected) item in winlist: %d\n", selNdx);
+
+    if (iconW > tileW || iconH > tileH) {
+        float rt = (float)tileW / (float)iconW;
+        if (iconW > tileW) {
+            iconW = tileW;
+            iconH = rt * iconH;
+        }
+        if (iconH > tileH) {
+            rt = (float)tileH / (float)iconH;
+            iconH = tileH;
+            iconW = rt * iconW;
+        }
     }
 
     visualTileW = tileW + frameW + g.option_spacing;
     visualTileH = tileH + frameW + g.option_spacing;
     if (g.debug > 0) {
-        msg(0, "tile w=%d h=%d\n", tileW, tileH);
-        msg(0, "uiwin %dx%d +%d+%d", uiwinW, uiwinH, uiwinX, uiwinY);
+        msg(0, "got %d windows, tile %dx%d, uiwin %dx%d +%d+%d\n",
+            g.maxNdx, tileW, tileH, uiwinW, uiwinH, uiwinX, uiwinY);
         if (g.debug > 1) {
-            int nscr, si;
-            Screen *s;
-            nscr = ScreenCount(dpy);
-            msg(0, ", %d screen(s):", nscr);
-            for (si = 0; si < nscr; ++si) {
-                s = ScreenOfDisplay(dpy, si);
+            int nscr = ScreenCount(dpy);
+            msg(0, "%d screen(s):", nscr);
+            for (int si = 0; si < nscr; ++si) {
+                Screen *s = ScreenOfDisplay(dpy, si);
                 msg(0, " [%dx%d]", s->width, s->height);
             }
-            msg(0, ", viewport %dx%d+%d+%d, avail_w %d",
-                g.vp.w, g.vp.h, g.vp.x, g.vp.y, avail_w);
+            msg(0, ", viewport %dx%d+%d+%d",
+                g.vp.w, g.vp.h, g.vp.x, g.vp.y);
         }
         msg(0, "\n");
     }
-// prepare tiles
-
-    if (!g.winlist) {
-        die("no winlist in uiShow. this shouldn't happen, please report.");
+    if (g.debug > 0) {
+        for (int i = 0; i < g.maxNdx; i++) {
+            msg(0,
+                "%d: %lx (lvl %d, icon %lu (%dx%d)): %s\n", i,
+                g.winlist[i].id, g.winlist[i].reclevel,
+                g.winlist[i].icon_drawable, g.winlist[i].icon_w,
+                g.winlist[i].icon_h, g.winlist[i].name);
+        }
     }
-    int m;
-    for (m = 0; m < g.maxNdx; m++) {
-        prepareTile(&(g.winlist[m]));
-    }
-    msg(0, "prepared %d tiles\n", m);
-    if (fontLabel)
-        XftFontClose(dpy, fontLabel);
 
 // prepare our window
     unsigned long valuemask = CWBackPixel | CWBorderPixel | CWOverrideRedirect;
@@ -1065,45 +1083,16 @@ int uiShow(bool direction)
 
     XMapWindow(dpy, uiwin);
 
-    // positioning and size hints.
-    // centering required in JWM.
-    // should really perform centering when
-    //  viewport == wm screen. how would we know the latter?
-    long sflags;
-    sflags =
-        USPosition | USSize | PPosition | PSize | PMinSize | PMaxSize |
-        PBaseSize;
-    // gravity: https://tronche.com/gui/x/xlib/window/attributes/gravity.html
-    if (g.option_positioning != POS_NONE)
-        sflags |= PWinGravity;
-    XSizeHints uiwinSizeHints = { sflags,
-        uiwinX, uiwinY,         // obsoleted
-        uiwinW, uiwinH,         // obsoleted
-        uiwinW, uiwinH,
-        uiwinW, uiwinH,
-        0, 0,
-        {0, 0}
-        , {0, 0}
-        ,
-        uiwinW, uiwinH,
-        (g.option_positioning == POS_CENTER
-         //&& g.option_vp_mode != VP_SPECIFIC) ? CenterGravity : ForgetGravity };
-         && g.option_vp_mode != VP_SPECIFIC) ? CenterGravity : StaticGravity
-    };
-    XSetWMNormalHints(dpy, uiwin, &uiwinSizeHints);
+    setSizeHints();
 
     if (g.option_cornerRadius > 0) {
         int ev, err;
-        if (XShapeQueryExtension(dpy, &ev, &err)) {
-            roundMask = createRoundedRectMask(tileW, tileH, g.option_cornerRadius);
-            Pixmap winMask = createRoundedRectMask(uiwinW, uiwinH, g.option_cornerRadius);
-            if (winMask) {
-                XShapeCombineMask(dpy, uiwin, ShapeBounding, 0, 0, winMask, ShapeSet);
-                XFreePixmap(dpy, winMask);
-            }
-        } else {
+        if (!XShapeQueryExtension(dpy, &ev, &err)) {
             msg(-1, "X Shape extension not available, disabling rounded corners\n");
             g.option_cornerRadius = 0;
+        } else {
+            roundMask = createRoundedRectMask(tileW, tileH, g.option_cornerRadius);
+            applyWindowShapeMask();
         }
     }
 
@@ -1393,6 +1382,158 @@ int uiUpWindow(void)    { return uiMoveFocus(0, -1); }
 int uiDownWindow(void)  { return uiMoveFocus(0,  1); }
 int uiLeftWindow(void)  { return uiMoveFocus(-1, 0); }
 int uiRightWindow(void) { return uiMoveFocus( 1, 0); }
+
+// rebuild UI after workspace switch:
+// free tiles, re-init winlist, recalculate layout, redraw
+//
+static int rebuildUi(void)
+{
+    for (int m = 0; m < g.maxNdx; m++) {
+        if (g.winlist && g.winlist[m].tile) {
+            XFreePixmap(dpy, g.winlist[m].tile);
+            g.winlist[m].tile = 0;
+        }
+    }
+    freeWinlist();
+
+    if (!initAndLayout()) {
+        uiHide();
+        return 0;
+    }
+
+    selNdx = 0;
+
+    setSizeHints();
+    XMoveResizeWindow(dpy, uiwin, uiwinX, uiwinY, uiwinW, uiwinH);
+    applyWindowShapeMask();
+
+    XSync(dpy, False);
+    {
+        Window rroot;
+        int rx, ry;
+        unsigned int rw, rh, rb, rd;
+        if (XGetGeometry(dpy, uiwin, &rroot, &rx, &ry, &rw, &rh, &rb, &rd)) {
+            if ((int)rw != uiwinW || (int)rh != uiwinH) {
+                uiwinW = rw;
+                uiwinH = rh;
+                if (g.option_layout == LAYOUT_GRID) {
+                    if (g.option_vertical)
+                        rows = (uiwinH - frameW - 2 * g.option_winPad + g.option_spacing)
+                             / (tileH + frameW + g.option_spacing);
+                    else
+                        cols = (uiwinW - frameW - 2 * g.option_winPad + g.option_spacing)
+                             / (tileW + frameW + g.option_spacing);
+                    if (rows < 1) rows = 1;
+                    if (rows > g.maxNdx) rows = g.maxNdx;
+                    if (cols < 1) cols = 1;
+                    if (cols > g.maxNdx) cols = g.maxNdx;
+                }
+            }
+        }
+    }
+
+    XClearWindow(dpy, uiwin);
+    renderAllTiles();
+    framesRedraw();
+    XFlush(dpy);
+    return 1;
+}
+
+static int findNeighborDesktop(long *viewports, int count, unsigned long cur, bool next)
+{
+    long cx = viewports[cur * 2];
+    int best = -1;
+    for (int pass = 0; pass < 2; pass++) {
+        for (int i = 0; i < count; i++) {
+            if ((unsigned long)i == cur) continue;
+            long vx = viewports[i * 2];
+            if (vx == cx) continue;
+            if (pass == 0 && (next ? vx <= cx : vx >= cx)) continue;
+            if (best < 0 || (next ? vx < viewports[best * 2] : vx > viewports[best * 2]))
+                best = i;
+        }
+        if (best >= 0) break;
+    }
+    return best;
+}
+
+static int findI3VisibleWorkspace(long *viewports, int count, long target_x)
+{
+    FILE *fp = popen("i3-msg -t get_workspaces 2>/dev/null", "r");
+    if (!fp) return -1;
+    char buf[8192];
+    size_t n = fread(buf, 1, sizeof(buf) - 1, fp);
+    int rc = pclose(fp);
+    if (rc != 0 || n == 0) return -1;
+    buf[n] = '\0';
+    int idx = 0;
+    char *p = buf;
+    while ((p = strchr(p, '{')) != NULL) {
+        char *end = strchr(p, '}');
+        if (!end) break;
+        char *np = strstr(p, "\"num\":");
+        if (np && np < end) {
+            strtol(np + 6, &np, 10);
+            char *vp = strstr(np, "\"visible\":");
+            char *rp = strstr(np, "\"rect\"");
+            if (vp && vp < end && rp && rp < end
+                && strncmp(vp + 10, "true", 4) == 0) {
+                char *xp = strstr(rp, "\"x\":");
+                if (xp && xp < end) {
+                    long rx = strtol(xp + 4, NULL, 10);
+                    if (rx == target_x && idx < count && viewports[idx * 2] == target_x)
+                        return idx;
+                }
+            }
+        }
+        idx++;
+        p = end + 1;
+    }
+    return -1;
+}
+
+static int adjacentWorkspace(bool next)
+{
+    int count;
+    long *viewports = ewmh_getViewports(&count);
+    if (!viewports) return -1;
+
+    unsigned long cur = g.viewDesktop != DESKTOP_UNKNOWN
+        ? g.viewDesktop : ewmh_getCurrentDesktop();
+    if (cur >= (unsigned long)count || cur == DESKTOP_UNKNOWN) { free(viewports); return -1; }
+
+    int target = findNeighborDesktop(viewports, count, cur, next);
+    if (target < 0) { free(viewports); return -1; }
+
+    int i3_target = findI3VisibleWorkspace(viewports, count, viewports[target * 2]);
+    if (i3_target >= 0) { free(viewports); return i3_target; }
+
+    free(viewports);
+    return target;
+}
+
+static int switchWorkspace(int next)
+{
+    if (!uiwin)
+        return 0;
+
+    int target = adjacentWorkspace(next);
+    if (target < 0) {
+        unsigned long current = g.viewDesktop != DESKTOP_UNKNOWN
+            ? g.viewDesktop : ewmh_getCurrentDesktop();
+        unsigned long nDesktops = ewmh_getNumberOfDesktops();
+        if (nDesktops < 2) return 0;
+        target = next
+            ? (current + 1) % nDesktops
+            : (current == 0 ? nDesktops - 1 : current - 1);
+    }
+
+    g.viewDesktop = target;
+    return rebuildUi();
+}
+
+int uiNextWorkspace(void) { return switchWorkspace(true);  }
+int uiPrevWorkspace(void) { return switchWorkspace(false); }
 
 //
 // kill X client of current window

@@ -186,7 +186,7 @@ int rp_initWinlist(void)
     char *tok;
 
     g.maxNdx = 0;
-    if (g.option_desktop == DESK_CURRENT)
+    if (g.option_desktop == DESK_CURRENT && g.viewDesktop == DESKTOP_UNKNOWN)
         return rp_add_windows_in_group(DESKTOP_UNKNOWN, DESKTOP_UNKNOWN);
 
     // discover rp groups
@@ -215,6 +215,8 @@ int rp_initWinlist(void)
     // cycle through rp groups
     for (gri = 0; gri < ngr; gri++) {
         w_group = gr[gri];
+        if (g.viewDesktop != DESKTOP_UNKNOWN && (unsigned long)w_group != g.viewDesktop)
+            continue;
         msg(0, "processing rp group %d\n", w_group);
         snprintf(arg2, arg2len, "gselect %d", w_group);
         if (!execAndReadStdout(ratpoison_cmd, args, NULL, 0))

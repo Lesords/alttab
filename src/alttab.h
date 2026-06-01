@@ -71,6 +71,8 @@ along with alttab.  If not, see <http://www.gnu.org/licenses/>.
 #define DEFDOWNKEYKS    XK_j
 #define DEFLEFTKEYKS    XK_h
 #define DEFRIGHTKEYKS   XK_l
+#define DEFPREVWSKS XK_comma
+#define DEFNEXTWSKS XK_period
 
 #include "icon.h"
 
@@ -206,6 +208,7 @@ typedef struct {
     KeyCode option_prevCode, option_nextCode;
     KeyCode option_cancelCode, option_killCode;
     KeyCode option_upCode, option_downCode, option_leftCode, option_rightCode;
+    KeyCode option_prevWsCode, option_nextWsCode;
 #define BL_MIN          0
 #define BL_NONE         0
 #define BL_DESKTOP      1
@@ -237,6 +240,7 @@ typedef struct {
 #define LAYOUT_STACK    1
 #define LAYOUT_DEFAULT  LAYOUT_GRID
     int option_layout;
+    unsigned long viewDesktop;      // override for "view" mode, DESKTOP_UNKNOWN = use real current desktop
 } Globals;
 
 // gui
@@ -250,6 +254,8 @@ int uiUpWindow(void);
 int uiDownWindow(void);
 int uiLeftWindow(void);
 int uiRightWindow(void);
+int uiNextWorkspace(void);
+int uiPrevWorkspace(void);
 void uiAnimRender(void);
 int uiKillWindow(void);
 int uiSelectWindow(int ndx);
@@ -290,6 +296,9 @@ int ewmh_initWinlist(void);
 int ewmh_setFocus(int winNdx, Window fwin); // fwin used if non-zero
 unsigned long ewmh_getCurrentDesktop(void);
 unsigned long ewmh_getDesktopOfWindow(Window w);
+unsigned long ewmh_getNumberOfDesktops(void);
+int ewmh_switch_desktop(unsigned long desktop);
+long *ewmh_getViewports(int *count);
 bool ewmh_skipWindowInTaskbar(Window w);
 
 /* RANDR */
