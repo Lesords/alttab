@@ -60,7 +60,8 @@ Options:\n\
    -pwk str    keysym of 'prev workspace' key (screen-aware)\n\
    -nwk str    keysym of 'next workspace' key (screen-aware)\n\
    -ck str    keysym of 'cancel' key\n\
-   -dk str    keysym of 'kill' key\n\
+    -dk str    keysym of 'kill' key\n\
+   -sk str    keysym of 'scratchpad' key\n\
    -upk str   keysym of 'up' key\n\
    -dnk str   keysym of 'down' key\n\
    -lk str    keysym of 'left' key\n\
@@ -135,6 +136,7 @@ static int use_args_and_xrm(int *argc, char **argv)
         {"-nk", "*nextkey.keysym", XrmoptionSepArg, NULL},
         {"-ck", "*cancelkey.keysym", XrmoptionSepArg, NULL},
         {"-dk", "*killkey.keysym", XrmoptionSepArg, NULL},
+        {"-sk", "*scratchkey.keysym", XrmoptionSepArg, NULL},
         {"-upk", "*upkey.keysym", XrmoptionSepArg, NULL},
         {"-dnk", "*downkey.keysym", XrmoptionSepArg, NULL},
         {"-lk", "*leftkey.keysym", XrmoptionSepArg, NULL},
@@ -268,6 +270,7 @@ static int use_args_and_xrm(int *argc, char **argv)
         break;
     }
     msg(0, "desktops: %d\n", g.option_desktop);
+    g.saved_option_desktop = g.option_desktop;
 
     switch (xresource_load_int(&db, XRMAPPNAME, "screens", &scindex)) {
     case 1:
@@ -293,6 +296,7 @@ static int use_args_and_xrm(int *argc, char **argv)
 #define  killC  g.option_killCode
 #define  prevWsC  g.option_prevWsCode
 #define  nextWsC  g.option_nextWsCode
+#define  scratchC g.option_scratchCode
 #define  GMM  g.option_modMask
 #define  GBM  g.option_backMask
 
@@ -361,6 +365,11 @@ static int use_args_and_xrm(int *argc, char **argv)
         die("%s\n", errmsg);
     nextWsC = ksi != 0 ? ksi : XKeysymToKeycode(dpy, DEFNEXTWSKS);
 
+    ksi = ksym_option_to_keycode(&db, XRMAPPNAME, "scratchkey", &errmsg);
+    if (ksi == -1)
+        die("%s\n", errmsg);
+    scratchC = ksi != 0 ? ksi : XKeysymToKeycode(dpy, DEFSCRATCHKS);
+
     switch (xresource_load_int(&db, XRMAPPNAME, "modifier.mask", &(GMM))) {
     case 1:
         msg(-1,
@@ -400,8 +409,8 @@ static int use_args_and_xrm(int *argc, char **argv)
         GMM, GBM, MC, KC);
     msg(0, "cancelCode %d, killCode %d\n",
         cancelC, killC);
-    msg(0, "prevWsCode %d, nextWsCode %d\n",
-        prevWsC, nextWsC);
+    msg(0, "prevWsCode %d, nextWsCode %d, scratchCode %d\n",
+        prevWsC, nextWsC, scratchC);
 
     g.option_tileW = DEFTILEW;
     g.option_tileH = DEFTILEH;
@@ -843,6 +852,8 @@ int main(int argc, char **argv)
                 } else if (g.uiShowHasRun && ev.xkey.keycode == g.option_nextWsCode) {
                     CHECK_97;
                     uiNextWorkspace();
+                } else if (ev.xkey.keycode == g.option_scratchCode) {
+                    uiToggleScratchpad();
                 } else {  // non-tab
                     switch (isPrevNextKey(ev.xkey.keycode)) {
                     case 1:

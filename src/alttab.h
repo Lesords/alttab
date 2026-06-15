@@ -73,6 +73,7 @@ along with alttab.  If not, see <http://www.gnu.org/licenses/>.
 #define DEFRIGHTKEYKS   XK_l
 #define DEFPREVWSKS XK_comma
 #define DEFNEXTWSKS XK_period
+#define DEFSCRATCHKS XK_s
 
 #include "icon.h"
 
@@ -208,7 +209,8 @@ typedef struct {
     KeyCode option_prevCode, option_nextCode;
     KeyCode option_cancelCode, option_killCode;
     KeyCode option_upCode, option_downCode, option_leftCode, option_rightCode;
-    KeyCode option_prevWsCode, option_nextWsCode;
+    KeyCode option_prevWsCode, option_nextWsCode, option_scratchCode;
+    int saved_option_desktop;
 #define BL_MIN          0
 #define BL_NONE         0
 #define BL_DESKTOP      1
@@ -256,6 +258,7 @@ int uiLeftWindow(void);
 int uiRightWindow(void);
 int uiNextWorkspace(void);
 int uiPrevWorkspace(void);
+int uiToggleScratchpad(void);
 void uiAnimRender(void);
 int uiKillWindow(void);
 int uiSelectWindow(int ndx);

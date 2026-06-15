@@ -503,7 +503,7 @@ static int grabKeysAtUiShow(bool grabUngrab)
 {
     char *grabhint =
         "Error while (un)grabbing key 0x%x with mask 0x%x/0x%x.\n";
-#define nkeys 10
+#define nkeys 11
     KeyCode key[nkeys] = {
         g.option_prevCode,
         g.option_nextCode,
@@ -514,7 +514,8 @@ static int grabKeysAtUiShow(bool grabUngrab)
         g.option_leftCode,
         g.option_rightCode,
         g.option_prevWsCode,
-        g.option_nextWsCode
+        g.option_nextWsCode,
+        g.option_scratchCode
     };
     int k;
 
@@ -1268,6 +1269,8 @@ int uiHide(void)
     if (animFrom) { free(animFrom); animFrom = NULL; }
     if (animTo) { free(animTo); animTo = NULL; }
     grabKeysAtUiShow(false);
+    if (g.option_desktop == DESK_SPECIAL)
+        g.option_desktop = g.saved_option_desktop;
     // free XRender Pictures before destroying the window
     // (destroying a window auto-destroys Pictures on it)
     if (uiwinPic) {
@@ -1534,6 +1537,24 @@ static int switchWorkspace(int next)
 
 int uiNextWorkspace(void) { return switchWorkspace(true);  }
 int uiPrevWorkspace(void) { return switchWorkspace(false); }
+
+//
+// toggle between normal desktop view and scratchpad (-d 4)
+//
+int uiToggleScratchpad(void)
+{
+    if (g.option_desktop == DESK_SPECIAL) {
+        g.option_desktop = g.saved_option_desktop;
+    } else {
+        g.saved_option_desktop = g.option_desktop;
+        g.option_desktop = DESK_SPECIAL;
+    }
+    if (g.uiShowHasRun) {
+        g.viewDesktop = DESKTOP_UNKNOWN;
+        return rebuildUi();
+    }
+    return uiShow(false);
+}
 
 //
 // kill X client of current window
